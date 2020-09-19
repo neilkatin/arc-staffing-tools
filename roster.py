@@ -75,13 +75,16 @@ def main():
 
 
     # add the reporting info
-    reporting_ws = output_wb.create_sheet(title=config.OUTPUT_SHEET_REPORTING)
-    generate_sups(reporting_ws, sup_dict, name_dict, title_names)
+    generate_sups(output_wb, sup_dict, name_dict, config.OUTPUT_SHEET_REPORTING)
 
     # add the no_sups folks
-    no_sups_ws = output_wb.create_sheet(title=config.OUTPUT_SHEET_NOSUPS)
-    generate_no_sups(no_sups_ws, no_sups, title_cols)
+    ws = output_wb.create_sheet(title=config.OUTPUT_SHEET_NOSUPS)
+    generate_no_sups(ws, no_sups, title_cols)
 
+    # add the non_supervisor folks
+    generate_non_svs(output_wb, sup_dict, name_dict, config.OUTPUT_SHEET_NONSVS)
+
+    generate_3days(output_wb, sup_dict, name_dict, config.OUTPUT_SHEET_3DAYS)
 
     default_sheet_name = 'Sheet'
     if default_sheet_name in output_wb:
@@ -136,7 +139,7 @@ def process_roster(ws, start_row, title_names, title_cols):
         #log.debug(f"row { row_num } values { row_dict }")
 
         name = row_dict['Name']
-        gap = row_dict['GAP(s)']
+        gap = format_gap(row_dict['GAP(s)'])
         sup = row_dict['Current/Last Supervisor']
         released = row_dict['Released']
 
@@ -168,12 +171,29 @@ def process_roster(ws, start_row, title_names, title_cols):
     return sup_dict, no_sups, name_dict
 
 
+ordinal_1900_01_01 = datetime.datetime(1900, 1, 1).toordinal()
 def excel_date_to_string(excel_date):
     """ convert floating excel representation of date to yyyy-mm-dd string """
 
-    dt = datetime.datetime.fromordinal(datetime.datetime(1900, 1, 1).toordinal() + int(excel_date) -2)
+    #dt = datetime.datetime.fromordinal(datetime.datetime(1900, 1, 1).toordinal() + int(excel_date) -2)
+    dt = excel_to_dt(excel_date)
 
     return dt.strftime('%Y-%m-%d')
+
+def excel_to_dt(excel_date):
+
+    dt = datetime.datetime.fromordinal(ordinal_1900_01_01 + int(excel_date) -2)
+
+    return dt
+
+
+gap_pattern = re.compile('.*,')
+def format_gap(gap):
+    gap = re.sub(gap_pattern,'', gap)
+    if gap == '':
+        gap = "No Assignment"
+
+    return gap
 
 
 
@@ -182,14 +202,11 @@ def format_reports(name, sup_row, name_dict):
 
     output = [ f"{'Name':25s} { 'GAP':15s} { 'Checked in':12s} { 'Last Day':12s} {'Cell Phone':14s} { 'Email':30s}" ]
 
-    gap_pattern = re.compile('.*,')
-
     for row in sup_row:
 
-        log.debug(f"name { row['Name'] } released: { row['Released'] }")
+        #plog.debug(f"name { row['Name'] } released: { row['Released'] }")
         # only add folks still on the DR
-        gap = row['GAP(s)']
-        gap = re.sub(gap_pattern,'', gap)
+        gap = format_gap(row['GAP(s)'])
         checkin = excel_date_to_string(row['Checked in'])
         lastday = excel_date_to_string(row['Expect release'])
         output.append(f"{ row['Name']:25s} { gap:15s} { checkin:12s} { lastday:12s} { row['Cell phone']:14s} { row['Email']:30s}")
@@ -205,21 +222,129 @@ last_regex = re.compile(',.*')
 def get_last(s):
     return re.sub(last_regex, '', s)
 
+def get_gap(s):
+    if s == '':
+        s = "No Assignment"
 
-def generate_sups(ws, sups, name_dict, title_dict):
-    """ generate a row for each supervisor, with their direct reports and contact info """
+    return s
+
+
+def get_unknown(s):
+    if s == '':
+        s = "Unknown"
+
+    return s
+
+def get_supervisor(s):
+    if s == '':
+        s = "NO SUPERVISOR"
+
+    #log.debug(f"get_supervisor: '{ s }'")
+    return s
+
+
+
+def generate_sups(wb, sups, name_dict, sheet_name):
+    """ generate a sheet for those with direct reports """
 
     output_cols = [
             { 'name': 'Name', 'width': 20, 'field': lambda x: name_dict[x]['Name'], },
             { 'name': 'First', 'width': 20, 'field': lambda x: get_first(name_dict[x]['Name']), },
             { 'name': 'Last', 'width': 20, 'field': lambda x: get_last(name_dict[x]['Name']), },
             { 'name': 'Email', 'width': 30, 'field': lambda x: name_dict[x]['Email'] },
-            { 'name': 'Supervisor', 'width': 30, 'field': lambda x: name_dict[x]['Current/Last Supervisor'] },
+            { 'name': 'Supervisor', 'width': 30, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
             { 'name': 'Last Day', 'width': 30, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
+            { 'name': 'GAP', 'width': 30, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
+            { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
+            { 'name': 'Location type', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
+            { 'name': 'Current lodging', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Current lodging']) },
             { 'name': 'Reports', 'width': 50, 'field': lambda x: format_reports(x, sups[x], name_dict), },
             ]
 
-    #log.debug(f"name_dict { name_dict.keys() }")
+    generate_sheet(wb, sups, output_cols, sheet_name)
+
+def generate_non_svs(wb, sups, name_dict, sheet_name):
+    """ generate a sheet for those without direct reports """
+
+
+    # get all the folks on name_dict who aren't on sups
+    individuals = {}
+    for name, val in name_dict.items():
+
+        # skip people on the supervisor lsit
+        if name in sups:
+            continue
+
+        # skip people not checked in
+        if val['Checked in'] == "":
+            continue
+
+        # skip people outprocessed
+        if val['Released'] != "":
+            continue
+
+        individuals[name] = val
+
+    output_cols = [
+            { 'name': 'Name', 'width': 20, 'field': lambda x: name_dict[x]['Name'], },
+            { 'name': 'First', 'width': 20, 'field': lambda x: get_first(name_dict[x]['Name']), },
+            { 'name': 'Last', 'width': 20, 'field': lambda x: get_last(name_dict[x]['Name']), },
+            { 'name': 'Email', 'width': 30, 'field': lambda x: name_dict[x]['Email'] },
+            { 'name': 'Supervisor', 'width': 30, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
+            { 'name': 'Last Day', 'width': 30, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
+            { 'name': 'GAP', 'width': 30, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
+            { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
+            { 'name': 'Location type', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
+            { 'name': 'Current lodging', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Current lodging']) },
+            ]
+
+    generate_sheet(wb, individuals, output_cols, sheet_name)
+
+
+def generate_3days(wb, sups, name_dict, sheet_name):
+    """ add everyone with 3 or fewer days left on the job """
+
+
+    short = {}
+    three_days = datetime.datetime.now() + datetime.timedelta(days=3)    # 3 days in the future
+    for name, val in name_dict.items():
+
+        # skip people not checked in
+        if val['Checked in'] == "":
+            continue
+
+        # skip people outprocessed
+        if val['Released'] != "":
+            continue
+
+        out_date = excel_to_dt(val['Expect release'])
+        if out_date > three_days:
+            continue
+
+        short[name] = val
+
+    output_cols = [
+            { 'name': 'Name', 'width': 20, 'field': lambda x: name_dict[x]['Name'], },
+            { 'name': 'First', 'width': 20, 'field': lambda x: get_first(name_dict[x]['Name']), },
+            { 'name': 'Last', 'width': 20, 'field': lambda x: get_last(name_dict[x]['Name']), },
+            { 'name': 'Email', 'width': 30, 'field': lambda x: name_dict[x]['Email'] },
+            { 'name': 'Supervisor', 'width': 30, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
+            { 'name': 'Last Day', 'width': 30, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
+            { 'name': 'GAP', 'width': 30, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
+            { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
+            { 'name': 'Location type', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
+            { 'name': 'Current lodging', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Current lodging']) },
+            ]
+
+    generate_sheet(wb, short, output_cols, sheet_name)
+
+
+
+
+def generate_sheet(wb, people, output_cols, sheet_name):
+    """ generate a row for each supervisor, with their direct reports and contact info """
+
+    ws = wb.create_sheet(title=sheet_name)
 
     # generate the title row
     for i, col_def in enumerate(output_cols):
@@ -230,19 +355,20 @@ def generate_sups(ws, sups, name_dict, title_dict):
 
 
     output_row = 1
-    for sup_name in sorted(sups.keys()):
+    for name in sorted(people.keys()):
         output_row += 1
-        sup_row = sups[sup_name]
+        sup_row = people[name]
 
-        #log.debug(f"processing sup { sup_name } len { len(sup_row) }")
+        #log.debug(f"processing sup { name } len { len(sup_row) }")
 
         for i, col_def in enumerate(output_cols):
-            value = col_def['field'](sup_name)
+            value = col_def['field'](name)
             ws.cell(column=i+1, row=output_row, value=value)
 
     ref = f"A1:{openpyxl.utils.get_column_letter(len(output_cols))}{ output_row }"
-    #log.debug(f"table range ref is '{ ref }'")
-    tab = table.Table(displayName='Reports', ref=ref)
+    log.debug(f"sheet { sheet_name } table range ref is '{ ref }'")
+
+    tab = table.Table(displayName=sheet_name, ref=ref)
     ws.add_table(tab)
 
 
@@ -285,6 +411,7 @@ def generate_no_sups(ws, no_sups, col_dict):
 
 
 
+
 def row_to_dict(row, title_cols):
     """ convert a row of data into a dict mapping column name to value """
 
@@ -293,93 +420,6 @@ def row_to_dict(row, title_cols):
         result[title_cols[index]] = value
 
     return result
-
-def gather_column(ws, column_num, title_row_num, table_name, column_name):
-    """ gather all the values in a column into dict for easy matching """
-
-    results = {}
-    row_num = title_row_num
-    for row in ws.iter_rows(min_row=title_row_num+1, min_col=column_num, max_col=column_num, values_only=True):
-        row_num += 1
-        cell = row[0]
-        if cell == '':
-            continue
-
-        # delete formatting characters
-        if isinstance(cell, str):
-            cell = re.sub('[ \t-]', '', cell)
-
-        value = str(cell)
-        if value in results:
-
-            # horrible hack to deal with n/a column in reservation no: just ignore values of n/a
-            if value != 'N/A':
-                # this is a duplicate entry
-                log.error(f"Found duplicate for table { table_name } column { column_name }: old row { results[value] }, new row { row_num }")
-
-        results[value] = row_num
-
-    return results
-
-def process_title_row(sheet, title_row_num):
-    """ build two dicts: one mapping column name to column number, and one from column number to name """
-    title_name_map = {}
-    title_cols = {}
-
-    for row in sheet.iter_rows(min_row=title_row_num, max_row=title_row_num, values_only=False):
-        for cell in row:
-            #log.debug(f"title { cell.column }, { cell.row } = '{ cell.value }'")
-            title_name_map[cell.value] = cell.column
-            title_cols[cell.column] = cell.value
-        break
-
-    return title_name_map, title_cols
-
-def build_map(sheet, sheet_name, starting_row, key_name_list, row_filter):
-    """ build a dict of all values in a sheet, keyed by the given column
-
-        use key_name_list to find the key for each entry in the returned dict.  The first
-        non-empty value is the list of column names will be the key.
-
-        The value for each dict entry will in turn be a dict of all the column-name to value cells in that row.
-        The dict entry will have two additional values added:
-
-          row_num: the number of the row (origin 1 in the sheet) the value appeared in
-          sheet_name: the sheet name (or label) passed into this function
-    """
-
-    title_name_map, title_cols = process_title_row(sheet, starting_row)
-
-    #log.debug(f"title_name_map: { title_name_map }")
-
-    results = {}
-    row_num = starting_row
-    for row in sheet.iter_rows(min_row=starting_row+1, values_only=False):
-        row_num += 1
-        row_map = { 'row_num': row_num, 'sheet_name': sheet_name }
-        for cell in row:
-            value = cell.value
-            title = title_cols[cell.column]
-            row_map[title] = value
-
-        if not row_filter(row_map):
-            continue
-
-        #log.debug(f"row_map: { row_map }")
-        for name in key_name_list:
-            key = row_map[name]
-            if key != '' and key != None:
-                break
-
-        if key == '' or key == None:
-            log.error(f"build_map: empty key from { key_name_list } for row { row_num }")
-
-        if key in results:
-            log.error(f"Error: duplicate entry for entry { key } on row { row_num } and { results[key]['row_num'] }")
-
-        results[key] = row_map
-
-    return results
 
 
 def parse_args():

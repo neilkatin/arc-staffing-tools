@@ -10,4 +10,6 @@ OUTPUT_DIR = "."
 OUTPUT_FILE = f"{ OUTPUT_DIR }/staffing.xlsx"
 
 OUTPUT_SHEET_REPORTING = "Reporting"
-OUTPUT_SHEET_NOSUPS = "No Supervisors"
+OUTPUT_SHEET_NOSUPS = "NoSupervisors"
+OUTPUT_SHEET_NONSVS = "NoReports"
+OUTPUT_SHEET_3DAYS = "Days3Left"

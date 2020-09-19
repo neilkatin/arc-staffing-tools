@@ -2,3 +2,4 @@
 .env
 staff_roster.xls
 staffing.xlsx
+~*.xlsx
