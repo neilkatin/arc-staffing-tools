@@ -9,6 +9,7 @@ verify_ssl = true
 python-dotenv = "*"
 openpyxl = "*"
 xlrd = "*"
+o365 = "*"
 
 [requires]
 python_version = "3.8"

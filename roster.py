@@ -54,22 +54,30 @@ def main():
         sys.exit(1)
 
     roster_wb = xlrd.open_workbook(roster_file)
+    output_file = config.OUTPUT_FILE
+    if os.path.exists(output_file):
+        os.remove(output_file)
+
+
+    output_wb = make_workbook(roster_wb, config)
+    output_wb.save(output_file)
+
+
+
+def make_workbook(roster_wb, config):
+    """ common point to generate output workbook from input workbook.
+
+        All file operations are 'above' this function (i.e. done by the callers
+        of this function)
+    """
+
     roster_ws = roster_wb.sheet_by_index(0)
-
-    nrows = roster_ws.nrows
-    ncols = roster_ws.ncols
-
-    #log.debug(f"roster nrows { nrows } ncols { ncols }")
 
     current_row = config.ROSTER_TITLE_ROW
 
     title_names, title_cols = parse_title_row(roster_ws, current_row)
 
     sup_dict, no_sups, name_dict = process_roster(roster_ws, current_row, title_names, title_cols)
-
-    output_file = config.OUTPUT_FILE
-    if os.path.exists(output_file):
-        os.remove(output_file)
 
     output_wb = openpyxl.Workbook()
 
@@ -90,7 +98,7 @@ def main():
     if default_sheet_name in output_wb:
         del output_wb[default_sheet_name]
 
-    output_wb.save(output_file)
+    return output_wb
 
 
 
