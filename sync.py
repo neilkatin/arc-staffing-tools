@@ -76,7 +76,7 @@ def test_sharepoint(account, site_id):
     sharepoint = account.sharepoint()
     site = sharepoint.get_site(site_id)
 
-    log.info(f"got site { site }")
+    log.debug(f"got site { site }")
 
 
 def test_storage(account, drive_id, config):
@@ -84,16 +84,16 @@ def test_storage(account, drive_id, config):
     storage = account.storage()
 
     drive = storage.get_drive(drive_id)
-    log.info(f"drive { drive }")
+    log.debug(f"drive { drive }")
 
     root = drive.get_root_folder()
-    log.info(f"root { root }")
+    log.debug(f"root { root }")
 
     for item in root.get_child_folders():
-        log.info(f"root child item: { item }")
+        log.debug(f"root child item: { item }")
 
     neil_notes = drive.get_item_by_path('/Workforce/Neil Notes/Mail Merge Spreadsheets')
-    log.info(f"neil_notes { neil_notes }")
+    log.debug(f"neil_notes { neil_notes }")
 
     xls_dict = {}
     xlsx_dict = {}
@@ -102,7 +102,7 @@ def test_storage(account, drive_id, config):
 
     for entry in neil_notes.get_items():
         name = entry.name
-        log.info(f"entry: { name } is_file { entry.is_file } modified { entry.modified } modified_by { entry.modified_by }")
+        log.debug(f"entry: { name } is_file { entry.is_file } modified { entry.modified } modified_by { entry.modified_by }")
 
         xls_result = xls_pattern.fullmatch(name)
         xlsx_result = xlsx_pattern.fullmatch(name)
@@ -116,7 +116,7 @@ def test_storage(account, drive_id, config):
 
         xlsx_name = xls_result.expand(r'staffing\1.xlsx')
 
-        log.info(f"pass 2: name { name } xlsx_name { xlsx_name }")
+        log.debug(f"pass 2: name { name } xlsx_name { xlsx_name }")
 
         # algorithm: we are going to process:
         #   any xls without an xlsx
@@ -133,7 +133,7 @@ def test_storage(account, drive_id, config):
                 log.info(f"converting { name }/{ entry.modified.strftime(date_format) } because xlsx { xlsx_name }/{xlsx_entry.modified.strftime(date_format) } is older.")
                 convert(entry, xlsx_name)
             else:
-                log.info(f"ignoring { name }/{ entry.modified.strftime(date_format) } because xlsx { xlsx_name }/{xlsx_entry.modified.strftime(date_format) } is newer.")
+                log.debug(f"ignoring { name }/{ entry.modified.strftime(date_format) } because xlsx { xlsx_name }/{xlsx_entry.modified.strftime(date_format) } is newer.")
 
 
 
