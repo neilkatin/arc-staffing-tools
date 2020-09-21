@@ -131,7 +131,7 @@ def test_storage(account, drive_id, config):
             xlsx_entry = xlsx_dict[xlsx_name]
             if entry.modified > xlsx_entry.modified:
                 log.info(f"converting { name }/{ entry.modified.strftime(date_format) } because xlsx { xlsx_name }/{xlsx_entry.modified.strftime(date_format) } is older.")
-                convert(entry, xlsx_name)
+                convert(neil_notes, entry, xlsx_name, config)
             else:
                 log.debug(f"ignoring { name }/{ entry.modified.strftime(date_format) } because xlsx { xlsx_name }/{xlsx_entry.modified.strftime(date_format) } is newer.")
 
