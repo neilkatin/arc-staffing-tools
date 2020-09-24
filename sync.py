@@ -92,7 +92,8 @@ def test_storage(account, drive_id, config):
     for item in root.get_child_folders():
         log.debug(f"root child item: { item }")
 
-    neil_notes = drive.get_item_by_path('/Workforce/Neil Notes/Mail Merge Spreadsheets')
+    #neil_notes = drive.get_item_by_path('/Workforce/Neil Notes/Mail Merge Spreadsheets')
+    neil_notes = drive.get_item_by_path(config.WORKFORCE_FOLDER_PATH)
     log.debug(f"neil_notes { neil_notes }")
 
     xls_dict = {}
