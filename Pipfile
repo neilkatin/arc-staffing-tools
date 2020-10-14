@@ -10,6 +10,8 @@ python-dotenv = "*"
 openpyxl = "*"
 xlrd = "*"
 o365 = "*"
+requests-html = "*"
+selenium = "*"
 
 [requires]
 python_version = "3.8"
