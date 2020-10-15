@@ -1,9 +1,7 @@
 *.swp
 .env
-staff_roster.xls
-staffing.xlsx
 ~*.xlsx
 my_token.txt
-arrival_roster.xls
-arrival_roster.xlsx
+*.xls
+*.xlsx
 cookies.txt
