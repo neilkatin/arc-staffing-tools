@@ -37,8 +37,6 @@ class ScrapeException(Exception):
 
 
 def get_session(config, session=None):
-    log.debug("in get_session")
-    
 
     cookies = None
 
