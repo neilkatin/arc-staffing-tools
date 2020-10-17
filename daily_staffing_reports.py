@@ -100,9 +100,10 @@ def main():
     message.bcc.add(['neil@askneil.com'])
 
     if args.post:
-        message.to.add(['cleo.hendrickson@redcross.org', 'kayla.jones5@redcross.org', 'neil.katin@redcross.org', 'helen.chang@redcross.org'])
+        #message.to.add(['cleo.hendrickson@redcross.org', 'kayla.jones5@redcross.org', 'neil.katin@redcross.org', 'helen.chang@redcross.org'])
         #message.to.add(['helen.chang@redcross.org'])
         #message.to.add(['neil.katin@redcross.org'])
+        message.bcc.add(['dr534-21workforcereportdistributionlist@AmericanRedCross.onmicrosoft.com'])
         pass
 
     message.body = \
