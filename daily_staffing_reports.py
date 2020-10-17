@@ -114,9 +114,9 @@ f"""<html>
 
 <H1>Staff Reports</H1>
 
-<p>Hello Everyone.  Welcome to the new automated staffing reports system</p>
+<p>Hello Everyone.  Welcome to the new automated staffing reports system.</p>
 
-<p>Here are the current staff reports</p>
+<p>Here are the current staff reports.</p>
 
 <p>Summary information:<p>
 <ul>
@@ -132,13 +132,14 @@ f"""<html>
     <li><b>Staff Requests</b>: { results['requests_requests'] } requests for { results['requests_open'] } Open Positions
 </ul>
 
-<p>The <b>DRO Shift Tool Roster</b> has been added to give a picture of the DRO shifts from yesterday, as well registered shifts for today and tomorrow. These workers don’t show up on the regular staff roster, so if you need to get ahold of them, you will find their contact information in the report</p>
+<p>The <b>DRO Shift Tool Roster</b> has been added to give a picture of the DRO shifts from yesterday, as well registered shifts for today and tomorrow. These workers don’t show up on the regular staff roster, so if you need to get ahold of them, you will find their contact information in the report.</p>
 
 <p>If you have a roster change to submit you can do so
 <a href='https://volunteerconnection.redcross.org/?nd=vms_public_form&form_id=8562'>on this form</a></p>
 
-<p>If you want to be removed from the list or think something could be improved in these reports: send an email to <a href='mailto:DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com'>DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com</a></p>
+<p>If you want to be removed from the list or think something could be improved in these reports: send an email to <a href='mailto:DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com'>DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com</a>.</p>
 
+<p>These reports were run at { TIMESTAMP }.</p>
 
 </body>
 </html>
