@@ -173,7 +173,7 @@ def process_arrival_roster(results, contents):
     results['arrive_today'] = 0
     results['arrive_tomorrow'] = 0
 
-    def pre_fixup(in_ws, out_ws):
+    def pre_fixup(in_ws, out_ws, params):
         # copy the title values
         out_ws['A1'] = in_ws.cell_value(0,0)
         out_ws['A2'] = in_ws.cell_value(1,0)
@@ -187,8 +187,18 @@ def process_arrival_roster(results, contents):
         out_ws.cell(row=2, column=11, value='Arriving Tomorrow').fill = fill_tomorrow
         out_ws.cell(row=3, column=11, value='Past Due Date').fill = fill_past
 
+        in_starting_row = params['in_starting_row']
+
+        if in_ws.cell_value(in_starting_row, 0) != 'Name':
+            if in_ws.cell_value(in_starting_row-1, 0) == 'Name':
+                # vc has fewer header rows in an empty spreadsheet...  Sigh.
+                params['in_starting_row'] = in_starting_row -1
+
     def filter_arrive_date(cell, today, fill_past, fill_today, fill_tomorrow):
         """ decide if there is a special fill to apply to the cell """
+        if cell.value == "":
+            return ""
+
         excel_date = cell.value
         dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
         date = dt.date()
@@ -201,7 +211,6 @@ def process_arrival_roster(results, contents):
         elif date == datetime.timedelta(1) + today:
             cell.fill = fill_tomorrow
             results['arrive_tomorrow'] += 1
-
 
     params = {
             'sheet_name': 'Arrival Roster',
@@ -233,10 +242,13 @@ def process_arrival_roster(results, contents):
             'column_fills': {
                     'Arrive date': lambda cell: filter_arrive_date(cell, TODAY, fill_past, fill_today, fill_tomorrow),
                     },
-            'pre_fixup': pre_fixup,
+            'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, params),
             }
 
     results['files'].append(params['out_file_name'])
+
+    # wierd things happen if arrival roster is empty: the title row is one row before it should be
+
     process_common(contents, params)
 
 
@@ -531,8 +543,6 @@ def process_shift_tool(results, contents):
 def process_common(contents, params):
     """ common code to process all sheets """
     
-    in_starting_row = params['in_starting_row']
-    out_starting_row = params['out_starting_row']
 
     in_wb = xlrd.open_workbook(file_contents=contents)
     in_ws = in_wb.sheet_by_index(0)
@@ -544,6 +554,9 @@ def process_common(contents, params):
     if 'pre_fixup' in params:
         params['pre_fixup'](in_ws, out_ws)
 
+    in_starting_row = params['in_starting_row']
+    out_starting_row = params['out_starting_row']
+
     # deal with the title row
     if 'delete_columns' in params:
         delete_columns = params['delete_columns']
@@ -553,6 +566,9 @@ def process_common(contents, params):
     # out_column_map maps column names to output columns, with columns to be ignored removed.
     # This could also reorder columns, but we're not using that functionality now.
     in_column_map, out_column_map = process_title_row(in_ws.row_values(in_starting_row), delete_columns)
+
+    #log.debug(f"in_column_map { in_column_map }")
+    #log.debug(f"out_column_map { out_column_map }")
 
     col_format = {}
     for col_name, cell_format in params['column_formats'].items():
