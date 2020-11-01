@@ -467,6 +467,8 @@ def process_shift_tool(results, contents):
 
     def filter_days(cell, today, fill_today, fill_tomorrow):
         """ decide if there is a special fill to apply to the cell """
+        if cell.value == '':
+            return
         excel_date = cell.value
         dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
         date = dt.date()
