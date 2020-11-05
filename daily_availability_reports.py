@@ -90,13 +90,17 @@ def main():
 
     if False:
         process_active_postions(results, read_active_positions(session, config))
-    elif False:
+    elif True:
         with open('samples/active_member_positions.xls', 'rb') as fh:
             xls_buffer = fh.read()
         process_active_positions(results, xls_buffer)
 
-    if True:
-        read_all_assignments(session, config)
+    if False:
+        process_all_assignments(results, read_all_assignments(session, config))
+    elif True:
+        with open('samples/all-assignments-by-date.xls', 'rb') as fh:
+            xls_buffer = fh.read()
+        process_all_assignments(results, xls_buffer)
 
 
 
@@ -161,6 +165,144 @@ TODAY = datetime.date.today()
 TIMESTAMP = datetime.datetime.now().strftime('%Y-%m-%d %H%M')
 LEFT_ALIGN = openpyxl.styles.Alignment(horizontal='left')
 
+def process_all_assignments(results, contents):
+    """ process the all assignments spreadsheet """
+
+    fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
+    fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
+    fill_past = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
+
+    results['arrive_today'] = 0
+    results['arrive_tomorrow'] = 0
+
+    last_row = False
+    dro_name = None
+    dro_number = None
+    member_number = None
+
+    def pre_fixup(in_ws, out_ws):
+        nonlocal dro_name
+        nonlocal dro_number
+
+        # copy the title values
+        out_ws['A1'] = 'All DR Assignments by DR in the last 90 days'
+
+        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
+        out_ws['a1'].font = title_font
+
+        dro_number = in_ws.cell_value(4,0)
+        dro_name = in_ws.cell_value(4,1)
+
+    def row_filter(row, column_dict):
+        """ filter out all title rows but the first one """
+        nonlocal last_row
+        nonlocal dro_name
+        nonlocal dro_number
+        nonlocal member_number
+
+        if last_row:
+            return False
+
+        if row[0] == 'People Assigned by DRO':
+            last_row = True
+            return False
+
+        mem_num = row[column_dict['Mem#']]
+        name = row[column_dict['Name']]
+        #log.debug(f"row_filter: name { name } mem_num { mem_num }")
+        chapter = row[column_dict['Chapter']]
+        
+        # filter out all other title rows
+        if chapter == 'Chapter':
+            return False
+
+        if chapter == '':
+            dro_name = name
+            dro_number = mem_num
+            return False
+
+        # just a normal row: process it
+        if isinstance(mem_num, (int, float)):
+            member_number = int(mem_num)
+            #log.debug(f"stashing member_number { member_number }")
+        return True
+
+    def fill_dro_name(cell):
+        nonlocal dro_name
+        cell.value = dro_name
+
+    def fill_dro_number(cell):
+        nonlocal dro_number
+        cell.value = dro_number
+
+    if 'county_lookup' in results:
+        county_lookup = results['county_lookup']
+    else:
+        county_lookup = {}
+
+    def fill_county(cell):
+        nonlocal county_lookup
+        nonlocal member_number
+
+        if member_number != None and member_number in county_lookup:
+            county = county_lookup[member_number]['county']
+            #log.debug(f"looked up member_number { member_number } county { county } / { county_lookup[member_number] }")
+        else:
+            log.debug(f"looked up member_number { member_number } county is not in dict")
+            county = 'unknown'
+
+
+
+        cell.value = county
+
+    params = {
+            'sheet_name': 'All Assignments by DR',
+            'out_file_name': f'All Assignments { TIMESTAMP }.xlsx',
+            'table_name': 'AllAssignments',
+            'in_starting_row': 5,
+            'out_starting_row': 2,
+            'column_formats': {
+                    'Assign': 'yyyy-mm-dd',
+                    'Release': 'yyyy-mm-dd',
+                    },
+            'column_widths': {
+                    'Mem#': 10,
+                    'Name': 25,
+                    'DR Name': 26,
+                    'DR Number': 10,
+                    'County': 15,
+                    'Last Action': 12,
+                    'GAP': 12,
+                    'Assign': 14,
+                    'Release': 14,
+                    'Category': 12,
+                    'Cell phone': 13,
+                    'Home phone': 13,
+                    },
+            'column_alignments': {
+                    'Assign': LEFT_ALIGN,
+                    'Release': LEFT_ALIGN,
+                    },
+            'column_fills': {
+                    'DR Number': fill_dro_number,
+                    'DR Name': fill_dro_name,
+                    'County': fill_county,
+                    },
+            'pre_fixup': pre_fixup,
+            'row_filter': row_filter,
+            'insert_columns': {
+                'DR Name': 'Chapter',
+                'DR Number': 'DR Name',
+                'County': 'Chapter',
+                },
+            'freeze_panes': 'C3',
+            }
+
+    results['files'].append(params['out_file_name'])
+    process_common(contents, params)
+
+
+
 def process_arrival_roster(results, contents):
 
     fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
@@ -177,27 +319,7 @@ def process_arrival_roster(results, contents):
         out_ws['A3'] = in_ws.cell_value(2,0)
 
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
-        out_ws['k1'].font = out_ws['k2'].font = out_ws['k3'].font = title_font
-        out_ws['a1'].font = out_ws['a2'].font = out_ws['a3'].font = title_font
-
-        out_ws.cell(row=1, column=11, value='Arriving Today').fill = fill_today
-        out_ws.cell(row=2, column=11, value='Arriving Tomorrow').fill = fill_tomorrow
-        out_ws.cell(row=3, column=11, value='Past Due Date').fill = fill_past
-
-    def filter_arrive_date(cell, today, fill_past, fill_today, fill_tomorrow):
-        """ decide if there is a special fill to apply to the cell """
-        excel_date = cell.value
-        dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
-        date = dt.date()
-
-        if date < today:
-            cell.fill = fill_past
-        elif date == today:
-            cell.fill = fill_today
-            results['arrive_today'] += 1
-        elif date == datetime.timedelta(1) + today:
-            cell.fill = fill_tomorrow
-            results['arrive_tomorrow'] += 1
+        out_ws['a1'].font = title_font
 
 
     params = {
@@ -460,10 +582,11 @@ def process_active_positions(results, contents):
     delete_columns = []
     in_column_map, out_column_map = process_title_row(in_ws.row_values(in_starting_row), delete_columns)
 
-    log.debug(f"in_column_map: { in_column_map }")
+    #log.debug(f"in_column_map: { in_column_map }")
 
     num_rows = in_ws.nrows - in_starting_row -1
     z_county_re = re.compile(r'Z County: (.*)')
+    county_re = re.compile(r' County$')
 
     log.debug(f"num_rows { num_rows }")
     last_member_num = None
@@ -477,7 +600,7 @@ def process_active_positions(results, contents):
             # we're past the last row
             member_num = None
         else:
-            log.debug(f"num_rows { num_rows } index { index } in_starting_row { in_starting_row }")
+            #log.debug(f"num_rows { num_rows } index { index } in_starting_row { in_starting_row }")
             in_row = in_ws.row_values(index + in_starting_row + 1)
             member_num = int(get_row_value(in_row, in_column_map, 'Member #'))
 
@@ -498,13 +621,14 @@ def process_active_positions(results, contents):
                         'z-county': z_county,
                         'row-num': start_row,
                         }
-                log.debug(f"adding entry: { member_entry }")
-                result_dict[member_num] = member_entry
+                #log.debug(f"adding entry: member_num { member_num} to { member_entry }")
+                result_dict[last_member_num] = member_entry
 
             # read out the cells we care about
             name = get_row_value(in_row, in_column_map, 'Account Name (hyperlink)')
             position = get_row_value(in_row, in_column_map, 'Position Name')
             county = get_row_value(in_row, in_column_map, 'County of Residence')
+            county = county_re.sub('', county)
 
             z_county = None
             last_member_num = member_num
@@ -629,6 +753,23 @@ def process_common(contents, params):
     # out_column_map maps column names to output columns, with columns to be ignored removed.
     # This could also reorder columns, but we're not using that functionality now.
     in_column_map, out_column_map = process_title_row(in_ws.row_values(in_starting_row), delete_columns)
+    #log.debug(f"in_column_map { in_column_map }")
+
+    if 'insert_columns' in params:
+        for insert_col_name, insert_after in params['insert_columns'].items():
+            # get the index of the existing column
+            #log.debug(f"out_column_map before inserts: { out_column_map }")
+            #log.debug(f"insert_col_name { insert_col_name } insert_after { insert_after }")
+            insert_col_num = out_column_map[insert_after]
+            new_out_map = {}
+            for col_name, col_index in out_column_map.items():
+                if col_index >= insert_col_num:
+                    col_index += 1
+                new_out_map[col_name] = col_index
+            out_column_map = new_out_map
+            out_column_map[insert_col_name] = insert_col_num
+        #log.debug(f"out_column_map after inserts: { out_column_map }")
+
 
     col_format = {}
     for col_name, cell_format in params['column_formats'].items():
@@ -665,8 +806,14 @@ def process_common(contents, params):
         out_index += 1
 
         for col_name, out_col in out_column_map.items():
-            in_col = in_column_map[col_name]
-            cell = out_ws.cell(row=out_index, column=out_col, value=in_row[in_col])
+            if col_name in in_column_map:
+                in_value = in_row[in_column_map[col_name]]
+            else:
+                in_value = ''
+
+            if index == 0:
+                in_value = col_name
+            cell = out_ws.cell(row=out_index, column=out_col, value=in_value)
 
             if index > 0:
                 if col_name in col_format:
@@ -692,6 +839,10 @@ def process_common(contents, params):
     table = openpyxl.worksheet.table.Table(displayName=params['table_name'], ref=table_ref)
     out_ws.add_table(table)
 
+    if 'freeze_panes' in params:
+        freeze_panes = params['freeze_panes']
+        log.debug(f"setting freeze_panes to cell '{ freeze_panes }'")
+        out_ws.freeze_panes = out_ws[freeze_panes]
 
     default_sheet_name = 'Sheet'
     if default_sheet_name in out_wb:
