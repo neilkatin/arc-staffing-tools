@@ -83,11 +83,6 @@ def main():
             'files': [],
             }
 
-    #process_arrival_roster(results, read_arrival_roster(session, config, False))
-    #process_open_requests(results, read_open_requests(session, config, False))
-    #process_staff_roster(results, read_staff_roster(session, config, False))
-    #process_shift_tool(results, read_shift_tool(session, config, False))
-
     if False:
         process_active_postions(results, read_active_positions(session, config))
     elif True:
@@ -96,11 +91,15 @@ def main():
         process_active_positions(results, xls_buffer)
 
     if False:
-        process_all_assignments(results, read_all_assignments(session, config))
+        process_all_assignments(results,
+                read_all_assignments(session, config),
+                read_current_assignments(session, config))
     elif True:
         with open('samples/all-assignments-by-date.xls', 'rb') as fh:
-            xls_buffer = fh.read()
-        process_all_assignments(results, xls_buffer)
+            xls0_buffer = fh.read()
+        with open('samples/currently_assigned.xls', 'rb') as fh:
+            xls1_buffer = fh.read()
+        process_all_assignments(results, xls0_buffer, xls1_buffer)
 
 
 
@@ -165,7 +164,7 @@ TODAY = datetime.date.today()
 TIMESTAMP = datetime.datetime.now().strftime('%Y-%m-%d %H%M')
 LEFT_ALIGN = openpyxl.styles.Alignment(horizontal='left')
 
-def process_all_assignments(results, contents):
+def process_all_assignments(results, contents_all_assignments, contents_current_assignments):
     """ process the all assignments spreadsheet """
 
     fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
@@ -180,12 +179,26 @@ def process_all_assignments(results, contents):
     dro_number = None
     member_number = None
 
-    def pre_fixup(in_ws, out_ws):
+    dro_name_split = re.compile(r'(\d+-\d+) (.*)')
+    def parse_dro(number, name):
+        """ the current sheet encodes the dro name in the dro number field; split it out """
+        nonlocal dro_name_split
+
+        if name == '':
+
+            match = dro_name_split.match(number)
+            if match != None:
+                number = match.group(1)
+                name = match.group(2)
+
+        return (number, name)
+
+    def pre_fixup(in_ws, out_ws, a1_value):
         nonlocal dro_name
         nonlocal dro_number
 
         # copy the title values
-        out_ws['A1'] = 'All DR Assignments by DR in the last 90 days'
+        out_ws['A1'] = a1_value
 
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['a1'].font = title_font
@@ -193,32 +206,52 @@ def process_all_assignments(results, contents):
         dro_number = in_ws.cell_value(4,0)
         dro_name = in_ws.cell_value(4,1)
 
-    def row_filter(row, column_dict):
+    def row_filter(row, column_dict, pass_type):
         """ filter out all title rows but the first one """
         nonlocal last_row
         nonlocal dro_name
         nonlocal dro_number
         nonlocal member_number
 
+        if pass_type == 'all':
+            last_row_val = 'People Assigned by DRO'
+            mem_num_col_name = 'Mem#'
+            col0_name = 'Mem#'
+            col1_name = 'Name'
+            col2_name = 'Chapter'
+        elif pass_type == 'current':
+            last_row_val = 'Region:'
+            mem_num_col_name = 'Mem #'
+            col0_name = 'Region'
+            col1_name = 'Mem #'
+            col2_name = 'Name'
+        else:
+            raise Exception(f"unknown pass_type '{ pass_type }'")
+
         if last_row:
             return False
 
-        if row[0] == 'People Assigned by DRO':
+        if row[0] == last_row_val:
             last_row = True
             return False
 
-        mem_num = row[column_dict['Mem#']]
-        name = row[column_dict['Name']]
-        #log.debug(f"row_filter: name { name } mem_num { mem_num }")
-        chapter = row[column_dict['Chapter']]
+        mem_num = row[column_dict[mem_num_col_name]]
+        col0 = row[column_dict[col0_name]]
+        col1 = row[column_dict[col1_name]]
+        col2 = row[column_dict[col2_name]]
+        #log.debug(f"row_filter: col0 '{ col0 }' col1 '{ col1 }' col2 '{ col2 }'")
         
         # filter out all other title rows
-        if chapter == 'Chapter':
+        if col2 == col2_name:
             return False
 
-        if chapter == '':
-            dro_name = name
-            dro_number = mem_num
+        if col0 == '' and col1 == '':
+            # blank line
+            return False
+
+        if col2 == '':
+            dro_number, dro_name = parse_dro(col0, col1)
+            #log.debug(f"Capturing dro_number '{ dro_number }' dro_name '{ dro_name }'")
             return False
 
         # just a normal row: process it
@@ -257,7 +290,7 @@ def process_all_assignments(results, contents):
 
     params = {
             'sheet_name': 'All Assignments by DR',
-            'out_file_name': f'All Assignments { TIMESTAMP }.xlsx',
+            'out_file_name': f'DR Assignments { TIMESTAMP }.xlsx',
             'table_name': 'AllAssignments',
             'in_starting_row': 5,
             'out_starting_row': 2,
@@ -288,8 +321,8 @@ def process_all_assignments(results, contents):
                     'DR Name': fill_dro_name,
                     'County': fill_county,
                     },
-            'pre_fixup': pre_fixup,
-            'row_filter': row_filter,
+            'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, 'All DR Assignments by DR in the last 90 days'),
+            'row_filter': lambda row, col_dict: row_filter(row, col_dict, 'all'),
             'insert_columns': {
                 'DR Name': 'Chapter',
                 'DR Number': 'DR Name',
@@ -299,270 +332,42 @@ def process_all_assignments(results, contents):
             }
 
     results['files'].append(params['out_file_name'])
-    process_common(contents, params)
+    out_wb = process_common(contents_all_assignments, params)
 
-
-
-def process_arrival_roster(results, contents):
-
-    fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
-    fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
-    fill_past = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
-
-    results['arrive_today'] = 0
-    results['arrive_tomorrow'] = 0
-
-    def pre_fixup(in_ws, out_ws):
-        # copy the title values
-        out_ws['A1'] = in_ws.cell_value(0,0)
-        out_ws['A2'] = in_ws.cell_value(1,0)
-        out_ws['A3'] = in_ws.cell_value(2,0)
-
-        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
-        out_ws['a1'].font = title_font
-
-
-    params = {
-            'sheet_name': 'Arrival Roster',
-            'out_file_name': f'Arrival Roster { TIMESTAMP }.xlsx',
-            'table_name': 'Arrival',
-            'in_starting_row': 5,
-            'out_starting_row': 4,
-            'column_formats': {
-                    'Arrive date': 'yyyy-mm-dd',
-                    'Flight Arrival Date/Time': 'yyyy-mm-dd HH:MM',
-                    },
-            'column_widths': {
-                    'Name': 25,
-                    'Flight Arrival Date/Time': 25,
-                    'Flight City': 18,
-                    'District': 18,
-                    'GAP': 12,
-                    'Arrive date': 14,
-                    'Reporting/Work Location': 22,
-                    'Email': 25,
-                    'Cell phone': 13,
-                    'Home phone': 13,
-                    'Work phone': 13,
-                    },
-            'column_alignments': {
-                    'Arrive date': LEFT_ALIGN,
-                    'Flight Arrival Date/Time': LEFT_ALIGN,
-                    },
-            'column_fills': {
-                    'Arrive date': lambda cell: filter_arrive_date(cell, TODAY, fill_past, fill_today, fill_tomorrow),
-                    },
-            'pre_fixup': pre_fixup,
+    params['sheet_name'] = 'Current Assignments'
+    params['table_name'] = 'CurrentAssignments'
+    params['column_formats'] = {
+            'Assigned': 'yyyy-mm-dd',
             }
-
-    results['files'].append(params['out_file_name'])
-    process_common(contents, params)
-
-
-def process_open_requests(results, contents):
-
-    def pre_fixup(in_ws, out_ws):
-        # copy the title values
-        out_ws['A1'] = in_ws.cell_value(0,0)
-        out_ws['E1'] = in_ws.cell_value(0,3)
-
-        date_cell = out_ws['A2']
-        date_cell.value = datetime.datetime.now()
-        date_cell.number_format = 'yyyy-mm-dd hh:mm'
-        date_cell.alignment = LEFT_ALIGN
-
-        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
-        out_ws['A1'].font = out_ws['E1'].font = title_font
-
-    results['requests_open'] = 0
-    results['requests_requests'] = 0
-
-    def filter_req(cell, results):
-        results['requests_requests'] += 1
-
-
-    def filter_open(cell, results):
-        value = cell.value
-
-        try:
-            results['requests_open'] += int(value)
-        except:
-            pass
-
-
-    params = {
-            'sheet_name': 'Open Staff Requests',
-            'out_file_name': f'Open Staff Requests { TIMESTAMP }.xlsx',
-            'table_name': 'OpenRequests',
-            'in_starting_row': 2,
-            'out_starting_row': 3,
-            'column_formats': {
-            #        'Arrive date': 'yyyy-mm-dd',
-            #        'Flight Arrival Date/Time': 'yyyy-mm-dd HH:MM',
-                    },
-            'column_widths': {
-                    'Proximity': 16,
-                    'G/A/P': 12,
-                    'Qual 1': 15,
-                    'Location': 18,
-                    'Supervisor': 24,
-                    },
-            'column_alignments': {
-            #        'Arrive date': LEFT_ALIGN,
-            #        'Flight Arrival Date/Time': LEFT_ALIGN,
-                    },
-            
-            'column_fills': {
-                    'Req':  lambda cell: filter_req(cell, results),
-                    'Open': lambda cell: filter_open(cell, results),
-                    },
-            'pre_fixup': pre_fixup,
-            #'post_fixup': post_fixup,
+    params['column_alignments'] = {
+                'Assigned': LEFT_ALIGN,
             }
-
-    results['files'].append(params['out_file_name'])
-    process_common(contents, params)
-
-
-
-def process_staff_roster(results, contents):
-    """ generate the staff roster spreadsheets """
-
-    fill_remain = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
-
-    def pre_fixup(in_ws, out_ws):
-        # copy the title values
-        out_ws['A1'] = in_ws.cell_value(0,0)
-        out_ws['A2'] = in_ws.cell_value(1,0)
-        out_ws['A3'] = in_ws.cell_value(2,0)
-
-        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
-        out_ws['A1'].font = out_ws['A2'].font = out_ws['A3'].font = title_font
-
-    def row_filter(row, out_column_map):
-        released = row[out_column_map['Released']]
-        #log.debug(f"checking released: { released }")
-
-        return released == ''
-
-    def filter_days_remain(cell, today, fill_remain):
-
-        value = cell.value
-        if value != "" and value != 'n/a':
-            value = cell.value = int(cell.value)
-            if value <= 2:
-                cell.fill = fill_remain
-
-    def filter_on_job(cell):
-        value = cell.value
-        if value != "" and value != 'n/a':
-            cell.value = int(cell.value)
-
-
-    results['staff_total'] = 0
-    results['staff_nccr'] = 0
-    results['staff_outprocessed'] = 0
-
-    def filter_region(cell, results):
-        """ don't change anything; just count total and NCCR folks """
-
-        NCCR = '05R28'
-        value = cell.value
-
-        results['staff_total'] += 1
-
-        if value == NCCR:
-            results['staff_nccr'] += 1
-
-    def filter_outprocessed(cell, results):
-        """ count total outprocessed people """
-        results['staff_outprocessed'] += 1
-
-
-    def post_fixup_staff(ws):
-
-        cell = ws['A2']
-        value = cell.value
-
-        regex = r'\(\d+ '
-        cell.value = re.sub(regex, f"({results['staff_total']} ", value)
-        #log.debug(f"value '{value}' after '{cell.value}'")
-
-    def post_fixup_outprocessed(ws):
-
-        cell = ws['A2']
-        value = cell.value
-
-        regex = r'\(\d+ '
-        cell.value = re.sub(regex, f"({results['staff_outprocessed']} ", value)
-        #log.debug(f"value '{value}' after '{cell.value}'")
-
-    params = {
-            'sheet_name': 'Staff Roster',
-            'out_file_name': f'Staff Roster { TIMESTAMP }.xlsx',
-            'table_name': 'StaffRoster',
-            'in_starting_row': 5,
-            'out_starting_row': 4,
-            'column_formats': {
-                    'Assigned': 'yyyy-mm-dd',
-                    'Checked in': 'yyyy-mm-dd',
-                    'Released': 'yyyy-mm-dd',
-                    'Expect release': 'yyyy-mm-dd',
-                    },
-            'column_widths': {
-                    'Name': 25,
-                    'Assigned': 11,
-                    'Checked in': 11,
-                    'Released': 11,
-                    'Current/Last Supervisor': 22,
-                    'GAP(s)': 14,
-                    'District': 16,
-                    'Reporting/Work Location': 36,
-                    'Location type': 16,
-                    'Expect release': 11,
-                    'Last action': 12,
-                    'Current lodging': 20,
-                    'Qualifications': 32,
-                    'All GAPs': 32,
-                    'Languages': 28,
-                    'All Supervisors': 28,
-                    'Evaluation status(es)': 28,
-                    'COVID-19 issuer/ notes': 48,
-                    'Email': 33,
-                    'Cell phone': 14,
-                    'Home phone': 14,
-                    'Work phone': 14,
-                    ' ZIP': 12,         # yes, there really is a space in the column title as generated by VC
-                    },
-            'column_alignments': {
-                    'Assigned': LEFT_ALIGN,
-                    'Checked in': LEFT_ALIGN,
-                    'Released': LEFT_ALIGN,
-                    'Expect release': LEFT_ALIGN,
-                    },
-            
-            'column_fills': {
-                    'DaysRemain': lambda cell: filter_days_remain(cell, TODAY, fill_remain),
-                    'On Job': lambda cell: filter_on_job(cell),
-                    'Region': lambda cell: filter_region(cell, results),
-                    },
-            'pre_fixup': pre_fixup,
-            'post_fixup': post_fixup_staff,
-            'row_filter': row_filter,
+    params['insert_columns'] = {
+            'DR Name': 'Home City',
+            'DR Number': 'DR Name',
+            'County': 'Home City',
             }
+    params['column_widths'] = {
+                'Mem #': 10,
+                'Name': 25,
+                'DR Number': 10,
+                'DR Name': 26,
+                'County': 15,
+                'Home City': 15,
+                'Assigned': 14,
+                'GAP': 12,
+                'Category': 12,
+                'Email': 30,
+                'Cell phone': 13,
+                'Home phone': 13,
+            }
+    params['pre_fixup'] =  lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, 'Currently assigned to a DR')
+    params['row_filter'] =  lambda row, col_dict: row_filter(row, col_dict, 'current')
+    params['freeze_panes'] = 'D3'
 
-    results['files'].append(params['out_file_name'])
-    process_common(contents, params)
+    last_row = False
+    out_wb = process_common(contents_current_assignments, params, out_wb=out_wb)
 
-    params['sheet_name'] = 'Outprocessed'
-    params['out_file_name'] = f'Outprocessed Roster { TIMESTAMP }.xlsx'
-    params['table_name'] = 'Outprocessed'
-    params['row_filter'] = lambda row, out_column_map: not row_filter(row, out_column_map)
-    params['column_fills']['Region'] = lambda cell: filter_outprocessed(cell, results)
-    params['post_fixup'] = post_fixup_outprocessed
-
-    results['files'].append(params['out_file_name'])
-    process_common(contents, params)
 
 
 def process_active_positions(results, contents):
@@ -647,88 +452,8 @@ def process_active_positions(results, contents):
     results['county_lookup'] = result_dict
 
 
-def process_shift_tool(results, contents):
-    """ prepare the dro shift tool spreadsheet """
 
-    fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
-    fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
-
-    def filter_days(cell, today, fill_today, fill_tomorrow):
-        """ decide if there is a special fill to apply to the cell """
-        excel_date = cell.value
-        dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
-        date = dt.date()
-
-        if date == today:
-            cell.fill = fill_today
-        elif date == datetime.timedelta(1) + today:
-            cell.fill = fill_tomorrow
-
-
-    def pre_fixup(in_ws, out_ws):
-        # copy the title values
-        out_ws['A1'] = in_ws.cell_value(0,0)
-        out_ws['A2'] = in_ws.cell_value(1,0)
-
-        out_ws['F1'] = 'Shifts Scheduled Today'
-        out_ws['F2'] = 'Shifts Scheduled Tomorrow'
-        out_ws['F1'].fill = fill_today
-        out_ws['F2'].fill = fill_tomorrow
-        out_ws['G1'].fill = fill_today
-        out_ws['G2'].fill = fill_tomorrow
-        out_ws['H1'].fill = fill_today
-        out_ws['H2'].fill = fill_tomorrow
-
-        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
-        out_ws['A1'].font = out_ws['A2'].font = title_font
-        out_ws['F1'].font = out_ws['F2'].font = title_font
-
-
-    params = {
-            'sheet_name': 'DRO Shift Tool',
-            'out_file_name': f'DRO Shift Tool { TIMESTAMP }.xlsx',
-            'table_name': 'ShiftTool',
-            'in_starting_row': 2,
-            'out_starting_row': 3,
-            'column_formats': {
-                    'Start Date': 'yyyy-mm-dd',
-                    'Start Time': 'hh:mm AM/PM',
-                    },
-            'column_widths': {
-                    'Name': 36,
-                    'Volunteer Status': 28,
-                    'Email': 38,
-                    'Phone Numbers': 36,
-                    'Shift Name': 36,
-                    'Start Date': 12,
-                    'Start Time': 12,
-                    'Shift Location': 48,
-                    },
-            'column_alignments': {
-                    'Start Date': LEFT_ALIGN,
-                    'Start Time': LEFT_ALIGN,
-                    },
-            'delete_columns': [
-                'Account ID',
-                'Address',
-                'District (of shift)',
-                'Attended/Sign In',
-                'Type of ID Presented',
-                ],
-            
-            'column_fills': {
-                    'Start Date': lambda cell: filter_days(cell, TODAY, fill_today, fill_tomorrow),
-                    },
-            'pre_fixup': pre_fixup,
-            #'post_fixup': post_fixup,
-            #'row_filter': row_filter,
-            }
-
-    results['files'].append(params['out_file_name'])
-    process_common(contents, params)
-
-
-def process_common(contents, params):
+def process_common(contents, params, out_wb=None):
     """ common code to process all sheets """
     
     in_starting_row = params['in_starting_row']
@@ -737,7 +462,9 @@ def process_common(contents, params):
     in_wb = xlrd.open_workbook(file_contents=contents)
     in_ws = in_wb.sheet_by_index(0)
 
-    out_wb = openpyxl.Workbook()
+    if out_wb == None:
+        out_wb = openpyxl.Workbook()
+
     out_ws = out_wb.create_sheet(title=params['sheet_name'])
 
     # do some ws dependent preliminary initialization
@@ -792,15 +519,17 @@ def process_common(contents, params):
     num_rows = in_ws.nrows - in_starting_row
     row_filter = lambda x, y: True
     if 'row_filter' in params:
+        log.debug("row filter is set")
         row_filter = params['row_filter']
 
-    #log.debug(f"num_rows { num_rows }")
+    log.debug(f"num_rows { num_rows }")
     out_index = out_starting_row -1
     for index in range(num_rows):
         in_row = in_ws.row_values(index + in_starting_row)
 
         # allow us to ignore rows
         if index > 0 and not row_filter(in_row, in_column_map):
+            #log.debug(f"ignoring row { index }")
             continue
 
         out_index += 1
@@ -850,6 +579,8 @@ def process_common(contents, params):
 
     out_wb.save(params['out_file_name'])
 
+    return out_wb
+
 
 def process_title_row(row, delete_columns):
     """ process an xlrd title row, returning a map of column names to column indexes (origin zero) """
@@ -868,11 +599,12 @@ def process_title_row(row, delete_columns):
     return in_column_map, out_column_map
 
 def read_all_assignments(session, config):
+    """ run the All Assignments By DR and/or Date Range report """
 
     dt_90_days = datetime.datetime.now() - datetime.timedelta(days=90)
     s_90_days = dt_90_days.strftime('%Y-%m-%d')
 
-    log.debug(f"s_90_days = '{ s_90_days }'")
+    #log.debug(f"s_90_days = '{ s_90_days }'")
 
 
     params0 = {
@@ -883,6 +615,23 @@ def read_all_assignments(session, config):
             'prompt2': 'All',
             'prompt3': s_90_days,
             'prompt4': '',
+            'output_format': 'xls',
+            'run': 'Run',
+            }
+
+    params1 = convert_params(params0)
+
+    return read_common(session, config, params0, params1)
+
+
+def read_current_assignments(session, config):
+    """ run the Disaster Responders Currently Assigned - Region report """
+
+    params0 = {
+            'query_id': '38613',
+            'nd': 'clearreports_launch_admin',
+            'reference': 'disaster',
+            'prompt1': '155',
             'output_format': 'xls',
             'run': 'Run',
             }
