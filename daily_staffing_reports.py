@@ -123,8 +123,8 @@ f"""<html>
 <ul>
     <li><b>Staff Counts</b>
         <ul>
-            <li>{ results['staff_total'] } active responders checked into the job</li>
-            <li>{ results['staff_nccr'] } active responders from NCCR</li>
+            <li>{ results['staff_total'] } active responders assigned to the job (both checked in and due to arrive)</li>
+            <li>{ results['staff_nccr'] } of those from NCCR</li>
             <li>{ results['arrive_today'] } on the arrival roster for today</li>
             <li>{ results['arrive_tomorrow'] } on the arrival roster for tomorrow</li>
             <li>{ results['staff_outprocessed'] } out-processed</li>
