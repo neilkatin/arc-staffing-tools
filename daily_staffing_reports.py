@@ -124,7 +124,7 @@ f"""<html>
     <li><b>Staff Counts</b>
         <ul>
             <li>{ results['staff_total'] } active responders assigned to the job (both checked in and due to arrive)</li>
-            <li>{ results['staff_nccr'] } of those from NCCR</li>
+            <!-- <li>{ results['staff_nccr'] } of those from NCCR</li> -->
             <li>{ results['arrive_today'] } on the arrival roster for today</li>
             <li>{ results['arrive_tomorrow'] } on the arrival roster for tomorrow</li>
             <li>{ results['staff_outprocessed'] } out-processed</li>
@@ -133,12 +133,15 @@ f"""<html>
     <li><b>Staff Requests</b>: { results['requests_requests'] } requests for { results['requests_open'] } Open Positions
 </ul>
 
+<!--
 <p>The <b>DRO Shift Tool Roster</b> has been added to give a picture of the DRO shifts from yesterday, as well registered shifts for today and tomorrow. These workers don’t show up on the regular staff roster, so if you need to get ahold of them, you will find their contact information in the report.</p>
 
 <p>If you have a roster change to submit you can do so
 <a href='https://volunteerconnection.redcross.org/?nd=vms_public_form&form_id=8562'>on this form</a></p>
 
 <p>If you want to be removed from the list or think something could be improved in these reports: send an email to <a href='mailto:DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com'>DR534-21-Staffing-Reports@AmericanRedCross.onmicrosoft.com</a>.</p>
+-->
+
 
 <p>These reports were run at { TIMESTAMP }.</p>
 
@@ -666,7 +669,7 @@ def read_arrival_roster(session, config, firsttime):
             'query_id': '1537756',
             'nd': 'clearreports_launch_admin',
             'reference': 'disaster',
-            'prompt1': '1694',
+            'prompt1': config.VC_DR_ID,
             'prompt2': 'Arrival Date',
             'prompt3': 'No',
             'prompt4': 'Yes',
@@ -679,7 +682,7 @@ def read_arrival_roster(session, config, firsttime):
             'nd': 'clearreports_auth',
             'init': 'xls',
             'query_id': '1537756',
-            'prompt0': '1694',
+            'prompt0': config.VC_DR_ID,
             'prompt1': 'Arrival Date',
             'prompt2': 'No',
             'prompt3': 'Yes',
@@ -696,7 +699,7 @@ def read_open_requests(session, config, firsttime):
             'query_id': '1555803',
             'nd': 'clearreports_launch_admin',
             'reference': 'disaster',
-            'prompt1': '1694',
+            'prompt1': config.VC_DR_ID,
             'output_format': 'xls',
             'run': 'Run',
             }
@@ -752,12 +755,12 @@ def read_staff_roster(session, config, firsttime):
     nextweek = TODAY + datetime.timedelta(7)
 
     dr_id = 10516   # dr 534-12; need to figure out how to map this
-    dr_hidden = 1694
+    dr_hidden = config.VC_DR_ID
 
     params0 = {
             'query_id': '1537757',
-            'nd': 'clearreports_launch_admin',
             'reference': 'disaster',
+            'nd': 'clearreports_launch_admin',
             'prompt1': f"{ dr_hidden }",
             'prompt2': 'All',
             'prompt3': 'All',
@@ -766,6 +769,7 @@ def read_staff_roster(session, config, firsttime):
             'prompt6': '',
             'prompt7': 'Yes',
             'prompt8': '-1__,__',
+            'prompt9': 'One line per person',
             'output_format': 'xls',
             'run': 'Run',
             }
@@ -782,13 +786,14 @@ def read_staff_roster(session, config, firsttime):
             'prompt5': params0['prompt6'],
             'prompt6': params0['prompt7'],
             'prompt7': "['-1']",
+            'prompt8': params0['prompt9'],
             }
 
     return read_common(session, config, params0, params1)
 
 def read_common(session, config, params0, params1):
 
-    url = "https://volunteerconnection.redcross.org/"
+    url = "https://volunteerconnection.redcross.org"
 
     headers = {
             #'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -806,6 +811,8 @@ def read_common(session, config, params0, params1):
             'User-Agent': '.Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.75 Safari/537.36',
             'X-Requested-With': 'XMLHttpRequest',
             }
+
+    #log.debug(f"params0 { params0 } params1 { params1 }")
     response = session.post(url, data=params0, headers=headers, timeout=config.WEB_TIMEOUT)
     response.raise_for_status()
 
@@ -813,13 +820,14 @@ def read_common(session, config, params0, params1):
     response = session.post(url, data=params1, headers=headers, timeout=config.WEB_TIMEOUT)
     response.raise_for_status()
 
-    #log.debug(f"response.content { response.content }")
+    log.debug(f"response.content { response.content }")
     anchor = response.html.find('a', first=True)
     href = anchor.attrs['href']
 
     url2 = url + href
 
-    #log.debug(f"url2 { url2 }")
+    log.debug(f"url2 { url2 }")
+
     response = session.get(url2, timeout=config.WEB_TIMEOUT)
     response.raise_for_status()
 
@@ -851,7 +859,7 @@ def init_config():
 
 def parse_args():
     parser = argparse.ArgumentParser(
-            description="process support for the regional bootcamp mission card system",
+            description="generate and send daily staffing reports",
             allow_abbrev=False)
     parser.add_argument("--debug", help="turn on debugging output", action="store_true")
     parser.add_argument("--post", help="post to real recipients", action="store_true")

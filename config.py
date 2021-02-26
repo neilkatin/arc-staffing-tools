@@ -6,6 +6,8 @@ ROSTER_FILE = f"{ ROSTER_DIR }/staff_roster.xls"
 # origin 1 row of the title line in the roster file
 ROSTER_TITLE_ROW = 6
 
+VC_DR_ID = '1849'     # DR716-21 TX Winter Storm
+
 OUTPUT_DIR = "."
 OUTPUT_FILE = f"{ OUTPUT_DIR }/staffing.xlsx"
 

@@ -63,6 +63,8 @@ def get_session(config, session=None):
 
     session.cookies = cookies
 
+    #log.debug(f"returning new cookies { cookies }")
+
     return session
 
 
