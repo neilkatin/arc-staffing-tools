@@ -84,7 +84,7 @@ def main():
     process_arrival_roster(results, read_arrival_roster(session, config, False))
     process_open_requests(results, read_open_requests(session, config, False))
     process_staff_roster(results, read_staff_roster(session, config, False))
-    process_shift_tool(results, read_shift_tool(session, config, False))
+    #process_shift_tool(results, read_shift_tool(session, config, False))
 
     mailbox = account.mailbox()
     message = mailbox.new_message()
@@ -103,7 +103,7 @@ def main():
         #message.to.add(['cleo.hendrickson@redcross.org', 'kayla.jones5@redcross.org', 'neil.katin@redcross.org', 'helen.chang@redcross.org'])
         #message.to.add(['helen.chang@redcross.org'])
         #message.to.add(['neil.katin@redcross.org'])
-        message.bcc.add(['dr534-21workforcereportdistributionlist@AmericanRedCross.onmicrosoft.com'])
+        message.bcc.add(['dr716-21-staff-reports@americanredcross.onmicrosoft.com'])
         pass
 
     message.body = \
@@ -132,6 +132,16 @@ f"""<html>
     </li>
     <li><b>Staff Requests</b>: { results['requests_requests'] } requests for { results['requests_open'] } Open Positions
 </ul>
+
+
+<p>
+This message was sent to dr716-21-staff-reports@americanredcross.onmicrosoft.com.  You can see old reports in that group.
+</p>
+
+<p>
+If you wish to be removed from the group or have more people added: email
+<a href='mailto:dr716-21-staff-reports-owner@AmericanRedCross.onmicrosoft.com'>dr716-21-staff-reports-owner@AmericanRedCross.onmicrosoft.com</a>
+</p>
 
 <!--
 <p>The <b>DRO Shift Tool Roster</b> has been added to give a picture of the DRO shifts from yesterday, as well registered shifts for today and tomorrow. These workers don’t show up on the regular staff roster, so if you need to get ahold of them, you will find their contact information in the report.</p>
