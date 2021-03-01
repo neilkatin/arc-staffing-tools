@@ -81,9 +81,19 @@ def main():
             'files': [],
             }
 
+    # for debugging new reports
+    #with open("air_travel_roster.xls", 'wb') as file:
+    #    data = read_air_travel_roster(session, config, False)
+    #    file.write(data)
+    #with open("air_travel_roster.xls", 'rb') as file:
+    #    data = file.read()
+    #process_air_travel_roster(results, data)
+    #return
+
     process_arrival_roster(results, read_arrival_roster(session, config, False))
     process_open_requests(results, read_open_requests(session, config, False))
     process_staff_roster(results, read_staff_roster(session, config, False))
+    process_air_travel_roster(results, read_air_travel_roster(session, config, False))
     #process_shift_tool(results, read_shift_tool(session, config, False))
 
     mailbox = account.mailbox()
@@ -176,6 +186,94 @@ ORDINAL_1900_01_01 = datetime.datetime(1900, 1, 1).toordinal()
 TODAY = datetime.date.today()
 TIMESTAMP = datetime.datetime.now().strftime('%Y-%m-%d %H%M')
 LEFT_ALIGN = openpyxl.styles.Alignment(horizontal='left')
+
+def process_air_travel_roster(results, contents):
+
+    #fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
+    #fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
+    #fill_past = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
+
+    #results['arrive_today'] = 0
+    #results['arrive_tomorrow'] = 0
+
+    def pre_fixup(in_ws, out_ws, params):
+        # copy the title values
+        out_ws['A1'] = in_ws.cell_value(0,2)    # report name
+        out_ws['D1'] = in_ws.cell_value(2,0)    # DR string
+        out_ws['A2'] = in_ws.cell_value(0,11)    # Date time label (with Timezone)
+        out_ws['D2'] = in_ws.cell_value(1,11) + in_ws.cell_value(1,14)   # Date Value + Time Value
+        out_ws['D2'].number_format = 'yyyy-mm-dd HH:MM'
+        out_ws['D2'].alignment = LEFT_ALIGN
+
+        title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
+        out_ws['a1'].font = out_ws['d1'].font = title_font
+
+        #out_ws.cell(row=1, column=11, value='Arriving Today').fill = fill_today
+        #out_ws.cell(row=2, column=11, value='Arriving Tomorrow').fill = fill_tomorrow
+        #out_ws.cell(row=3, column=11, value='Past Due Date').fill = fill_past
+
+        #in_starting_row = params['in_starting_row']
+
+        #if in_ws.cell_value(in_starting_row, 0) != 'Name':
+        #    if in_ws.cell_value(in_starting_row-1, 0) == 'Name':
+        #        # vc has fewer header rows in an empty spreadsheet...  Sigh.
+        #        params['in_starting_row'] = in_starting_row -1
+
+    def filter_arrive_date(cell, today, fill_past, fill_today, fill_tomorrow):
+        """ decide if there is a special fill to apply to the cell """
+        if cell.value == "":
+            return ""
+
+        excel_date = cell.value
+        dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
+        date = dt.date()
+
+        if date < today:
+            cell.fill = fill_past
+        elif date == today:
+            cell.fill = fill_today
+            results['arrive_today'] += 1
+        elif date == datetime.timedelta(1) + today:
+            cell.fill = fill_tomorrow
+            results['arrive_tomorrow'] += 1
+
+    params = {
+            'sheet_name': 'Air Travel Roster',
+            'out_file_name': f'Air Travel Roster { TIMESTAMP }.xlsx',
+            'table_name': 'AirTravel',
+            'in_starting_row': 3,
+            'out_starting_row': 3,
+            'column_formats': {
+                    'Arrival Date/Time': 'yyyy-mm-dd HH:MM',
+                    'Flight Arrival Date/Time': 'yyyy-mm-dd HH:MM',
+                    },
+            'column_widths': {
+                    'Mem#': 10,
+                    'Name': 25,
+                    'Gen': 4,
+                    'Arrival Date/Time': 20,
+                    'Arrival City': 20,
+                    'Departure City': 20,
+                    'GAP': 17,
+                    'Airline': 17,
+                    'Assign/CheckIn': 12,
+                    'Cell Number': 13,
+                    'Status': 19, 
+                    'Region name': 32,
+                    },
+            'column_alignments': {
+                    'Arrival Date/Time': LEFT_ALIGN,
+                    },
+            'column_fills': {
+                    #'Arrive date': lambda cell: filter_arrive_date(cell, TODAY, fill_past, fill_today, fill_tomorrow),
+                    },
+            'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, params),
+            }
+
+    results['files'].append(params['out_file_name'])
+
+
+    process_common(contents, params)
 
 def process_arrival_roster(results, contents):
 
@@ -672,8 +770,32 @@ def process_title_row(row, delete_columns):
     return in_column_map, out_column_map
 
 
-def read_arrival_roster(session, config, firsttime):
 
+def read_air_travel_roster(session, config, firsttime):
+
+    params0 = {
+            'query_id': '481261',
+            'nd': 'clearreports_launch_admin',
+            'reference': 'disaster',
+            'prompt1': config.VC_DR_ID,
+            'output_format': 'xls',
+            'run': 'Run',
+            }
+
+    params1 = {
+            'nd': 'clearreports_auth',
+            'init': 'xls',
+            'query_id': '481261',
+            'prompt0': config.VC_DR_ID,
+            'reference': 'disaster',
+            }
+
+
+    return read_common(session, config, params0, params1)
+
+
+
+def read_arrival_roster(session, config, firsttime):
 
     params0 = {
             'query_id': '1537756',
