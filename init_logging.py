@@ -40,6 +40,12 @@ def init_logging(app_name):
             'selenium': {
                 'level': 'INFO',
             },
+            'requests_oauthlib': {
+                'level': 'INFO',
+            },
+            'O365.connection': {
+                'level': 'WARN',
+            }
         },
     }
 

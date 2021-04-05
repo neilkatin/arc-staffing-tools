@@ -6,3 +6,4 @@ my_token.txt
 *.xlsx
 cookies.txt
 samples
+__pycache__

@@ -12,6 +12,7 @@ xlrd = "*"
 o365 = "*"
 requests-html = "*"
 selenium = "*"
+jinja2 = "*"
 
 [requires]
 python_version = "3.9"

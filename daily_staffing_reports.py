@@ -90,6 +90,10 @@ def main():
     #process_air_travel_roster(results, data)
     #return
 
+    #with open("open_requests.xls", 'wb') as fd:
+    #    data = read_open_requests(session, config, False)
+    #    fd.write(data)
+
     process_arrival_roster(results, read_arrival_roster(session, config, False))
     process_open_requests(results, read_open_requests(session, config, False))
     process_staff_roster(results, read_staff_roster(session, config, False))
@@ -110,10 +114,7 @@ def main():
     message.bcc.add(['neil@askneil.com'])
 
     if args.post:
-        #message.to.add(['cleo.hendrickson@redcross.org', 'kayla.jones5@redcross.org', 'neil.katin@redcross.org', 'helen.chang@redcross.org'])
-        #message.to.add(['helen.chang@redcross.org'])
-        #message.to.add(['neil.katin@redcross.org'])
-        message.bcc.add(['dr716-21-staff-reports@americanredcross.onmicrosoft.com'])
+        message.bcc.add(['dr767-21-staffing-reports@americanredcross.onmicrosoft.com'])
         pass
 
     message.body = \
@@ -123,9 +124,9 @@ f"""<html>
 </head>
 <body>
 
-<H1>Staff Reports</H1>
+<H1>DR Staff Reports</H1>
 
-<p>Hello Everyone.  Welcome to the new automated staffing reports system.</p>
+<p>Hello Everyone.  Welcome to the automated staffing reports system.</p>
 
 <p>Here are the current staff reports.</p>
 
@@ -145,12 +146,14 @@ f"""<html>
 
 
 <p>
-This message was sent to dr716-21-staff-reports@americanredcross.onmicrosoft.com.  You can see old reports in that group.
+This message was sent to dr767-21-staffing-reports@americanredcross.onmicrosoft.com.  You can see old reports in
+<a href='https://outlook.office.com/mail/group/americanredcross.onmicrosoft.com/dr767-21-staffing-reports/email'> the list archive</a>
+(if you have a redcross.org account...)
 </p>
 
 <p>
 If you wish to be removed from the group or have more people added: email
-<a href='mailto:dr716-21-staff-reports-owner@AmericanRedCross.onmicrosoft.com'>dr716-21-staff-reports-owner@AmericanRedCross.onmicrosoft.com</a>
+<a href='mailto:dr767-21-staffing-reports-owner@AmericanRedCross.onmicrosoft.com'>dr767-21-staffing-reports-owner@AmericanRedCross.onmicrosoft.com</a>
 </p>
 
 <!--
@@ -175,8 +178,9 @@ If you wish to be removed from the group or have more people added: email
 
 
     # clean up after ourselves
-    for file in results['files']:
-        os.remove(file)
+    if not args.keep_files:
+        for file in results['files']:
+            os.remove(file)
 
     return
 
@@ -370,11 +374,6 @@ def process_open_requests(results, contents):
         out_ws['A1'] = in_ws.cell_value(0,0)
         out_ws['E1'] = in_ws.cell_value(0,3)
 
-        date_cell = out_ws['A2']
-        date_cell.value = datetime.datetime.now()
-        date_cell.number_format = 'yyyy-mm-dd hh:mm'
-        date_cell.alignment = LEFT_ALIGN
-
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['A1'].font = out_ws['E1'].font = title_font
 
@@ -398,11 +397,9 @@ def process_open_requests(results, contents):
             'sheet_name': 'Open Staff Requests',
             'out_file_name': f'Open Staff Requests { TIMESTAMP }.xlsx',
             'table_name': 'OpenRequests',
-            'in_starting_row': 2,
-            'out_starting_row': 3,
+            'in_starting_row': 1,
+            'out_starting_row': 2,
             'column_formats': {
-            #        'Arrive date': 'yyyy-mm-dd',
-            #        'Flight Arrival Date/Time': 'yyyy-mm-dd HH:MM',
                     },
             'column_widths': {
                     'Proximity': 16,
@@ -750,6 +747,7 @@ def process_common(contents, params):
     if default_sheet_name in out_wb:
         del out_wb[default_sheet_name]
 
+    log.debug(f"saving file { params['out_file_name'] }")
     out_wb.save(params['out_file_name'])
 
 
@@ -952,7 +950,7 @@ def read_common(session, config, params0, params1):
     response = session.post(url, data=params1, headers=headers, timeout=config.WEB_TIMEOUT)
     response.raise_for_status()
 
-    log.debug(f"response.content { response.content }")
+    #log.debug(f"response.content { response.content }")
     anchor = response.html.find('a', first=True)
     href = anchor.attrs['href']
 
@@ -995,6 +993,7 @@ def parse_args():
             allow_abbrev=False)
     parser.add_argument("--debug", help="turn on debugging output", action="store_true")
     parser.add_argument("--post", help="post to real recipients", action="store_true")
+    parser.add_argument("--keep-files", help="don't delete output spreadsheets", action="store_true")
 
     args = parser.parse_args()
     return args

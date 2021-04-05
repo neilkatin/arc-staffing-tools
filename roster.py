@@ -16,8 +16,12 @@ import openpyxl.worksheet.table as table
 import openpyxl.styles.colors
 import dotenv
 import xlrd
+import O365
 
+import vc_session
+import daily_staffing_reports
 import config as config_static
+import gen_templates
 
 
 log = logging.getLogger(__name__)
@@ -36,19 +40,42 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug("running...")
 
-    config_dotenv = dotenv.dotenv_values(verbose=True)
+    config = init_config()
 
-    config = AttrDict()
-    for item in dir(config_static):
-        if not item.startswith('__'):
-            config[item] = getattr(config_static, item)
+    # initialize office 365 graph api
+    credentials = (config.CLIENT_ID, config.CLIENT_SECRET)
 
-    #log.debug(f"config after copy: { config.keys() }")
+    scopes = [
+            'https://graph.microsoft.com/Files.ReadWrite.All',
+            'https://graph.microsoft.com/Mail.Send',
+            'https://graph.microsoft.com/Mail.Send.Shared',
+            'https://graph.microsoft.com/offline_access',
+            'https://graph.microsoft.com/User.Read',
+            'https://graph.microsoft.com/User.ReadBasic.All',
+            'https://graph.microsoft.com/Sites.ReadWrite.All',
+            'https://graph.microsoft.com/offline_access',
+            'basic',
+            ]
 
-    for key, val in config_dotenv.items():
-        config[key] = val
+    token_backend = O365.FileSystemTokenBackend(token_path='.', token_filename="my_token.txt")
+    account = O365.Account(credentials, scopes=scopes, token_backend=token_backend)
+
+    if not account.is_authenticated:
+        account.authenticate()
+        if not account.is_authenticated:
+            log.fatal(f"Cannot authenticate account")
+            sys.exit(1)
+
+
+    # initialize volunteer connection api
 
     roster_file = config.ROSTER_FILE
+    if args.pull:
+        session = vc_session.get_session(config)
+        with open(roster_file, "wb") as file:
+            data = daily_staffing_reports.read_staff_roster(session, config, False)
+            file.write(data)
+
     if not os.path.exists(roster_file):
         log.fatal(f"Roster file { roster_file } not found")
         sys.exit(1)
@@ -61,6 +88,54 @@ def main():
 
     output_wb = make_workbook(roster_wb, config)
     output_wb.save(output_file)
+
+    templates = gen_templates.init()
+    date = datetime.datetime.now().strftime("%Y-%m-%d %H%M")
+
+    if args.send:
+        send_mail(account, date, output_wb[config.OUTPUT_SHEET_REPORTING], templates.get_template("mail_supervisor.html"), "Supervisor")
+        send_mail(account, date, output_wb[config.OUTPUT_SHEET_NONSVS],    templates.get_template("mail_nonsvs.html"),     "Worker")
+
+
+def send_mail(account, date, ws, template, label):
+
+    title_row = ws[1]
+    title_dict = {}
+
+    col_index = 0
+    for col in title_row:
+        value = title_row[col_index].value.replace(' ', '_')
+
+        #log.debug(f"title_row: { col_index } = '{ value }'")
+
+        title_dict[col_index] = value
+        col_index += 1
+
+    for row_index in range(1, ws.max_row):
+        row = ws[row_index + 1]
+
+        col_index = 0
+        context = { 'Date': date }
+        for col in row:
+            value = row[col_index].value
+            col_name = title_dict[col_index]
+            #log.debug(f"row { row_index }: { col_name } = '{ value }'")
+
+            context[col_name] = value;
+            col_index += 1
+
+        expand = template.render(context)
+        log.debug(f"message: { expand }")
+
+        m = account.new_message()
+        m.bcc.add("generic@askneil.com")
+        m.subject = f"{label} status - { date }"
+        m.body = expand
+        m.send()
+
+        # debugging only
+        if row_index > 3:
+            break
 
 
 
@@ -183,7 +258,9 @@ ordinal_1900_01_01 = datetime.datetime(1900, 1, 1).toordinal()
 def excel_date_to_string(excel_date):
     """ convert floating excel representation of date to yyyy-mm-dd string """
 
-    #dt = datetime.datetime.fromordinal(datetime.datetime(1900, 1, 1).toordinal() + int(excel_date) -2)
+    if excel_date == "":
+        return ""
+
     dt = excel_to_dt(excel_date)
 
     return dt.strftime('%Y-%m-%d')
@@ -387,18 +464,22 @@ def generate_no_sups(ws, no_sups, col_dict):
 
     """
 
-    date_column_names = { 'Assigned':1, 'Checked in': 1, 'Expected Release': 1, }
+    date_column_names = { 'Assigned':1, 'Checked in': 1, 'Expect release': 1, }
     date_column_cols = {}
 
     #log.debug(f"col_dict { col_dict }")
 
     # convert dicts back to array
     column_array = []
+    column_index = 0
     for key in sorted(col_dict.keys()):
+        column_index += 1
         name = col_dict[key]
         if name in date_column_names:
             date_column_cols[key] = 1
         column_array.append(name)
+        column_letter = openpyxl.utils.cell.get_column_letter(column_index)
+        ws.column_dimensions[column_letter].width = 14
 
     # fill in the title row
     for col, val in enumerate(column_array):
@@ -430,11 +511,35 @@ def row_to_dict(row, title_cols):
     return result
 
 
+def init_config():
+    class AttrDict(dict):
+        def __init__(self, *args, **kwargs):
+            super(AttrDict, self).__init__(*args, **kwargs)
+            self.__dict__ = self
+
+
+    config_dotenv = dotenv.dotenv_values(verbose=True)
+
+    config = AttrDict()
+    for item in dir(config_static):
+        if not item.startswith('__'):
+            config[item] = getattr(config_static, item)
+
+    #log.debug(f"config after copy: { config.keys() }")
+
+    for key, val in config_dotenv.items():
+        config[key] = val
+
+    return config
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
-            description="process support for the regional bootcamp mission card system",
+            description="Organize staff roster for mailing reports",
             allow_abbrev=False)
     parser.add_argument("--debug", help="turn on debugging output", action="store_true")
+    parser.add_argument("--pull", help="pull a new roster from VC", action="store_true")
+    parser.add_argument("--send", help="send emails to folks on the DR", action="store_true")
 
     args = parser.parse_args()
     return args
