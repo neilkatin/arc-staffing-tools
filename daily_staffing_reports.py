@@ -45,6 +45,7 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug("running...")
 
+    global config
     config = init_config()
 
     # initialize office 365 graph api
@@ -111,10 +112,10 @@ def main():
     #        content_type="text/plain",
     #        name='attach0.txt')
 
-    message.bcc.add(['neil@askneil.com'])
+    message.bcc.add([config.MAIL_BCC])
 
     if args.post:
-        message.bcc.add(['dr767-21-staffing-reports@americanredcross.onmicrosoft.com'])
+        message.bcc.add([config.MAIL_ADDRESS])
         pass
 
     message.body = \
@@ -146,14 +147,14 @@ f"""<html>
 
 
 <p>
-This message was sent to dr767-21-staffing-reports@americanredcross.onmicrosoft.com.  You can see old reports in
-<a href='https://outlook.office.com/mail/group/americanredcross.onmicrosoft.com/dr767-21-staffing-reports/email'> the list archive</a>
+This message was sent to { config.MAIL_ADDRESS }.  You can see old reports in
+<a href='{ config.MAIL_ARCHIVE }'> the list archive</a>
 (if you have a redcross.org account...)
 </p>
 
 <p>
 If you wish to be removed from the group or have more people added: email
-<a href='mailto:dr767-21-staffing-reports-owner@AmericanRedCross.onmicrosoft.com'>dr767-21-staffing-reports-owner@AmericanRedCross.onmicrosoft.com</a>
+<a href='mailto:{ config.MAIL_OWNER }'>{ config.MAIL_OWNER}</a>
 </p>
 
 <!--
@@ -243,7 +244,7 @@ def process_air_travel_roster(results, contents):
 
     params = {
             'sheet_name': 'Air Travel Roster',
-            'out_file_name': f'Air Travel Roster { TIMESTAMP }.xlsx',
+            'out_file_name': f'{ config.DR_NAME} Air Travel Roster { TIMESTAMP }.xlsx',
             'table_name': 'AirTravel',
             'in_starting_row': 3,
             'out_starting_row': 3,
@@ -329,7 +330,7 @@ def process_arrival_roster(results, contents):
 
     params = {
             'sheet_name': 'Arrival Roster',
-            'out_file_name': f'Arrival Roster { TIMESTAMP }.xlsx',
+            'out_file_name': f'{ config.DR_NAME } Arrival Roster { TIMESTAMP }.xlsx',
             'table_name': 'Arrival',
             'in_starting_row': 5,
             'out_starting_row': 4,
@@ -395,7 +396,7 @@ def process_open_requests(results, contents):
 
     params = {
             'sheet_name': 'Open Staff Requests',
-            'out_file_name': f'Open Staff Requests { TIMESTAMP }.xlsx',
+            'out_file_name': f'{ config.DR_NAME } Open Staff Requests { TIMESTAMP }.xlsx',
             'table_name': 'OpenRequests',
             'in_starting_row': 1,
             'out_starting_row': 2,
@@ -500,7 +501,7 @@ def process_staff_roster(results, contents):
 
     params = {
             'sheet_name': 'Staff Roster',
-            'out_file_name': f'Staff Roster { TIMESTAMP }.xlsx',
+            'out_file_name': f'{ config.DR_NAME } Staff Roster { TIMESTAMP }.xlsx',
             'table_name': 'StaffRoster',
             'in_starting_row': 5,
             'out_starting_row': 4,
@@ -556,7 +557,7 @@ def process_staff_roster(results, contents):
     process_common(contents, params)
 
     params['sheet_name'] = 'Outprocessed'
-    params['out_file_name'] = f'Outprocessed Roster { TIMESTAMP }.xlsx'
+    params['out_file_name'] = f'{ config.DR_NAME } Outprocessed Roster { TIMESTAMP }.xlsx'
     params['table_name'] = 'Outprocessed'
     params['row_filter'] = lambda row, out_column_map: not row_filter(row, out_column_map)
     params['column_fills']['Region'] = lambda cell: filter_outprocessed(cell, results)
@@ -851,7 +852,7 @@ def read_shift_tool(session, config, firsttime):
     yesterday = TODAY - datetime.timedelta(1)
     nextweek = TODAY + datetime.timedelta(7)
 
-    dr_id = 10516   # dr 534-12; need to figure out how to map this
+    dr_id = config.VC_DR_ID
 
     params0 = {
             'query_id': '1737309',
@@ -884,14 +885,13 @@ def read_staff_roster(session, config, firsttime):
     yesterday = TODAY - datetime.timedelta(1)
     nextweek = TODAY + datetime.timedelta(7)
 
-    dr_id = 10516   # dr 534-12; need to figure out how to map this
-    dr_hidden = config.VC_DR_ID
+    dr_id = config.VC_DR_ID
 
     params0 = {
             'query_id': '1537757',
             'reference': 'disaster',
             'nd': 'clearreports_launch_admin',
-            'prompt1': f"{ dr_hidden }",
+            'prompt1': f"{ dr_id }",
             'prompt2': 'All',
             'prompt3': 'All',
             'prompt4': 'Name',
