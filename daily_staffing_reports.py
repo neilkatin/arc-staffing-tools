@@ -116,7 +116,8 @@ def main():
 
     if args.post:
         message.bcc.add([config.MAIL_ADDRESS])
-        pass
+        log.debug(f"--post arg seen; sending to { config.MAIL_ADDRESS } also")
+
 
     message.body = \
 f"""<html>
