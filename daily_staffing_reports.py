@@ -95,11 +95,11 @@ def main():
     #    data = read_open_requests(session, config, False)
     #    fd.write(data)
 
-    process_arrival_roster(results, read_arrival_roster(session, config, False))
-    process_open_requests(results, read_open_requests(session, config, False))
-    process_staff_roster(results, read_staff_roster(session, config, False))
-    process_air_travel_roster(results, read_air_travel_roster(session, config, False))
-    #process_shift_tool(results, read_shift_tool(session, config, False))
+    process_arrival_roster(results, read_arrival_roster(session, config, args))
+    process_open_requests(results, read_open_requests(session, config, args))
+    process_staff_roster(results, read_staff_roster(session, config, args))
+    process_air_travel_roster(results, read_air_travel_roster(session, config, args))
+    #process_shift_tool(results, read_shift_tool(session, config, args))
 
     mailbox = account.mailbox()
     message = mailbox.new_message()
@@ -119,6 +119,21 @@ def main():
         log.debug(f"--post arg seen; sending to { config.MAIL_ADDRESS } also")
 
 
+    if args.post:
+        posting = ""
+    else:
+        posting = \
+f"""
+<p>
+DEBUG Version: not sent to the list
+</p>
+"""
+
+    text_arrive_past = f"<li>{ results['arrive_past'] } on the arrival roster for yesterday or before</li>"
+    text_arrive_today = f"<li>{ results['arrive_today'] } on the arrival roster for today</li>"
+    text_arrive_tomorrow = f"<li>{ results['arrive_tomorrow'] } on the arrival roster for tomorrow</li>"
+
+
     message.body = \
 f"""<html>
 <head>
@@ -127,7 +142,7 @@ f"""<html>
 <body>
 
 <H1>DR Staff Reports</H1>
-
+{ posting }
 <p>Hello Everyone.  Welcome to the automated staffing reports system.</p>
 
 <p>Here are the current staff reports.</p>
@@ -138,8 +153,9 @@ f"""<html>
         <ul>
             <li>{ results['staff_total'] } active responders assigned to the job (both checked in and due to arrive)</li>
             <!-- <li>{ results['staff_nccr'] } of those from NCCR</li> -->
-            <li>{ results['arrive_today'] } on the arrival roster for today</li>
-            <li>{ results['arrive_tomorrow'] } on the arrival roster for tomorrow</li>
+            { text_arrive_past if results['arrive_past'] != 0 else "" }
+            { text_arrive_today if results['arrive_today'] != 0 else "" }
+            { text_arrive_tomorrow if results['arrive_tomorrow'] != 0 else "" }
             <li>{ results['staff_outprocessed'] } out-processed</li>
         </ul>
     </li>
@@ -180,7 +196,7 @@ If you wish to be removed from the group or have more people added: email
 
 
     # clean up after ourselves
-    if not args.keep_files:
+    if not args.save_output:
         for file in results['files']:
             os.remove(file)
 
@@ -195,13 +211,6 @@ LEFT_ALIGN = openpyxl.styles.Alignment(horizontal='left')
 
 def process_air_travel_roster(results, contents):
 
-    #fill_today = openpyxl.styles.PatternFill(fgColor='C9E2B8', fill_type='solid')
-    #fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
-    #fill_past = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
-
-    #results['arrive_today'] = 0
-    #results['arrive_tomorrow'] = 0
-
     def pre_fixup(in_ws, out_ws, params):
         # copy the title values
         out_ws['A1'] = in_ws.cell_value(0,2)    # report name
@@ -213,35 +222,6 @@ def process_air_travel_roster(results, contents):
 
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['a1'].font = out_ws['d1'].font = title_font
-
-        #out_ws.cell(row=1, column=11, value='Arriving Today').fill = fill_today
-        #out_ws.cell(row=2, column=11, value='Arriving Tomorrow').fill = fill_tomorrow
-        #out_ws.cell(row=3, column=11, value='Past Due Date').fill = fill_past
-
-        #in_starting_row = params['in_starting_row']
-
-        #if in_ws.cell_value(in_starting_row, 0) != 'Name':
-        #    if in_ws.cell_value(in_starting_row-1, 0) == 'Name':
-        #        # vc has fewer header rows in an empty spreadsheet...  Sigh.
-        #        params['in_starting_row'] = in_starting_row -1
-
-    def filter_arrive_date(cell, today, fill_past, fill_today, fill_tomorrow):
-        """ decide if there is a special fill to apply to the cell """
-        if cell.value == "":
-            return ""
-
-        excel_date = cell.value
-        dt = datetime.datetime.fromordinal(ORDINAL_1900_01_01 + int(excel_date) -2)
-        date = dt.date()
-
-        if date < today:
-            cell.fill = fill_past
-        elif date == today:
-            cell.fill = fill_today
-            results['arrive_today'] += 1
-        elif date == datetime.timedelta(1) + today:
-            cell.fill = fill_tomorrow
-            results['arrive_tomorrow'] += 1
 
     params = {
             'sheet_name': 'Air Travel Roster',
@@ -271,7 +251,6 @@ def process_air_travel_roster(results, contents):
                     'Arrival Date/Time': LEFT_ALIGN,
                     },
             'column_fills': {
-                    #'Arrive date': lambda cell: filter_arrive_date(cell, TODAY, fill_past, fill_today, fill_tomorrow),
                     },
             'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, params),
             }
@@ -287,6 +266,7 @@ def process_arrival_roster(results, contents):
     fill_tomorrow = openpyxl.styles.PatternFill(fgColor='9BC2E6', fill_type='solid')
     fill_past = openpyxl.styles.PatternFill(fgColor='FFDB69', fill_type='solid')
 
+    results['arrive_past'] = 0
     results['arrive_today'] = 0
     results['arrive_tomorrow'] = 0
 
@@ -322,6 +302,7 @@ def process_arrival_roster(results, contents):
 
         if date < today:
             cell.fill = fill_past
+            results['arrive_past'] += 1
         elif date == today:
             cell.fill = fill_today
             results['arrive_today'] += 1
@@ -453,7 +434,7 @@ def process_staff_roster(results, contents):
         value = cell.value
         if value != "" and value != 'n/a':
             value = cell.value = int(cell.value)
-            if value <= 2:
+            if value <= 4:
                 cell.fill = fill_remain
 
     def filter_on_job(cell):
@@ -771,7 +752,7 @@ def process_title_row(row, delete_columns):
 
 
 
-def read_air_travel_roster(session, config, firsttime):
+def read_air_travel_roster(session, config, args):
 
     params0 = {
             'query_id': '481261',
@@ -791,11 +772,11 @@ def read_air_travel_roster(session, config, firsttime):
             }
 
 
-    return read_common(session, config, params0, params1)
+    return read_common(session, config, args, params0, params1, "cached_air_travel_roster.xls")
 
 
 
-def read_arrival_roster(session, config, firsttime):
+def read_arrival_roster(session, config, args):
 
     params0 = {
             'query_id': '1537756',
@@ -822,9 +803,11 @@ def read_arrival_roster(session, config, firsttime):
             }
 
 
-    return read_common(session, config, params0, params1)
+    return read_common(session, config, args, params0, params1, "cached_arrival_roster.xls")
 
-def read_open_requests(session, config, firsttime):
+
+
+def read_open_requests(session, config, args):
     """ read open staff requests """
 
     params0 = {
@@ -844,10 +827,10 @@ def read_open_requests(session, config, firsttime):
             'prompt0': params0['prompt1'],
             }
 
-    return read_common(session, config, params0, params1)
+    return read_common(session, config, args, params0, params1, "cached_open_staff_requests.xls")
 
 
-def read_shift_tool(session, config, firsttime):
+def read_shift_tool(session, config, args):
     """ read the dro shift tool query """
 
     yesterday = TODAY - datetime.timedelta(1)
@@ -877,14 +860,11 @@ def read_shift_tool(session, config, firsttime):
             'prompt3': "['Registered']",
             }
 
-    return read_common(session, config, params0, params1)
+    return read_common(session, config, args, params0, params1, "shift_tools.xls")
 
 
-def read_staff_roster(session, config, firsttime):
+def read_staff_roster(session, config, args):
     """ read the staff roster """
-
-    yesterday = TODAY - datetime.timedelta(1)
-    nextweek = TODAY + datetime.timedelta(7)
 
     dr_id = config.VC_DR_ID
 
@@ -920,11 +900,21 @@ def read_staff_roster(session, config, firsttime):
             'prompt8': params0['prompt9'],
             }
 
-    return read_common(session, config, params0, params1)
+    return read_common(session, config, args, params0, params1, "cached_staff_roster.xls")
 
-def read_common(session, config, params0, params1):
+
+
+
+def read_common(session, config, args, params0, params1, filename):
 
     url = "https://volunteerconnection.redcross.org"
+
+    if args.cached_input:
+        log.debug(f"Using cached input data from { filename }")
+        with open(filename, "rb") as fd:
+            content = fd.read()
+            return content
+
 
     headers = {
             #'accept': 'application/json, text/javascript, */*; q=0.01',
@@ -965,6 +955,11 @@ def read_common(session, config, params0, params1):
     log.debug(f"retrieved document.  size is { len(response.text) }, type is '{ response.headers.get('content-type') }'")
     #log.debug(f"document: { response.content }")
 
+    if args.save_input:
+        log.debug(f"Saving input data to { filename }")
+        with open(filename, "wb") as fd:
+            fd.write(response.content)
+
     return response.content
 
 def init_config():
@@ -994,7 +989,9 @@ def parse_args():
             allow_abbrev=False)
     parser.add_argument("--debug", help="turn on debugging output", action="store_true")
     parser.add_argument("--post", help="post to real recipients", action="store_true")
-    parser.add_argument("--keep-files", help="don't delete output spreadsheets", action="store_true")
+    parser.add_argument("--save-input", help="save a copy of the raw VC spreadsheets", action="store_true")
+    parser.add_argument("--cached-input", help="use the saved copies of the raw VC spreadsheets", action="store_true")
+    parser.add_argument("--save-output", help="don't delete output spreadsheets", action="store_true")
 
     args = parser.parse_args()
     return args
