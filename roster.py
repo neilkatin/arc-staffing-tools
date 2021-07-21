@@ -70,34 +70,41 @@ def main():
     # initialize volunteer connection api
 
     roster_file = config.ROSTER_FILE
-    if args.pull:
+    if args.cached_input:
+        if not os.path.exists(roster_file):
+            log.fatal(f"Roster file { roster_file } not found")
+            sys.exit(1)
+        with open(roster_file, "rb") as file:
+            data = file.read()
+    else:
         session = vc_session.get_session(config)
-        with open(roster_file, "wb") as file:
-            data = daily_staffing_reports.read_staff_roster(session, config, False)
-            file.write(data)
+        data = daily_staffing_reports.read_staff_roster(session, config, args)
+        if args.save_input:
+            with open(roster_file, "wb") as file:
+                file.write(data)
 
-    if not os.path.exists(roster_file):
-        log.fatal(f"Roster file { roster_file } not found")
-        sys.exit(1)
 
-    roster_wb = xlrd.open_workbook(roster_file)
-    output_file = config.OUTPUT_FILE
-    if os.path.exists(output_file):
-        os.remove(output_file)
-
+    roster_wb = xlrd.open_workbook(file_contents=data)
 
     output_wb = make_workbook(roster_wb, config)
-    output_wb.save(output_file)
+
+    if args.save_output:
+        output_file = config.OUTPUT_FILE
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        output_wb.save(output_file)
+
 
     templates = gen_templates.init()
     date = datetime.datetime.now().strftime("%Y-%m-%d %H%M")
 
-    if args.send:
-        send_mail(account, date, output_wb[config.OUTPUT_SHEET_REPORTING], templates.get_template("mail_supervisor.html"), "Supervisor")
-        send_mail(account, date, output_wb[config.OUTPUT_SHEET_NONSVS],    templates.get_template("mail_nonsvs.html"),     "Worker")
+    if args.send or args.test_send:
+        send_mail(account, date, output_wb[config.OUTPUT_SHEET_REPORTING], templates.get_template("mail_supervisor.html"), f"{ config.DR_NAME } Supervisor", config, args)
+        send_mail(account, date, output_wb[config.OUTPUT_SHEET_NONSVS],    templates.get_template("mail_nonsvs.html"), config.DR_NAME, config, args)
 
 
-def send_mail(account, date, ws, template, label):
+def send_mail(account, date, ws, template, label, config, args):
 
     title_row = ws[1]
     title_dict = {}
@@ -115,7 +122,11 @@ def send_mail(account, date, ws, template, label):
         row = ws[row_index + 1]
 
         col_index = 0
-        context = { 'Date': date }
+        context = {
+                'Date': date,
+                'mail_owner': config.MAIL_OWNER,
+                'dr_name': config.DR_NAME,
+                }
         for col in row:
             value = row[col_index].value
             col_name = title_dict[col_index]
@@ -127,15 +138,20 @@ def send_mail(account, date, ws, template, label):
         expand = template.render(context)
         log.debug(f"message: { expand }")
 
+        name = context['Name']
+
         m = account.new_message()
-        m.bcc.add("generic@askneil.com")
-        m.subject = f"{label} status - { date }"
+        if args.test_send:
+            m.bcc.add("generic@askneil.com")
+        if args.send:
+            m.to.add(context['Email'])
+        m.subject = f"{label} VC status - { date } - { name }"
         m.body = expand
         m.send()
 
         # debugging only
-        if row_index > 3:
-            break
+        #if row_index > 3:
+        #    break
 
 
 
@@ -340,8 +356,9 @@ def generate_sups(wb, sups, name_dict, sheet_name):
             { 'name': 'Supervisor', 'width': 30, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
             { 'name': 'Last Day', 'width': 30, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
             { 'name': 'GAP', 'width': 30, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
-            { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
             { 'name': 'Location type', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
+            { 'name': 'District', 'width': 30, 'field': lambda x: name_dict[x]['District'] },
+            { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
             { 'name': 'Current lodging', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Current lodging']) },
             { 'name': 'Reports', 'width': 50, 'field': lambda x: format_reports(x, sups[x], name_dict), },
             ]
@@ -477,9 +494,9 @@ def generate_no_sups(ws, no_sups, col_dict):
         name = col_dict[key]
         if name in date_column_names:
             date_column_cols[key] = 1
+            column_letter = openpyxl.utils.cell.get_column_letter(column_index)
+            ws.column_dimensions[column_letter].width = 14
         column_array.append(name)
-        column_letter = openpyxl.utils.cell.get_column_letter(column_index)
-        ws.column_dimensions[column_letter].width = 14
 
     # fill in the title row
     for col, val in enumerate(column_array):
@@ -538,8 +555,11 @@ def parse_args():
             description="Organize staff roster for mailing reports",
             allow_abbrev=False)
     parser.add_argument("--debug", help="turn on debugging output", action="store_true")
-    parser.add_argument("--pull", help="pull a new roster from VC", action="store_true")
     parser.add_argument("--send", help="send emails to folks on the DR", action="store_true")
+    parser.add_argument("--test-send", help="send emails to a test recipient", action="store_true")
+    parser.add_argument("--save-input", help="save a copy of the raw VC spreadsheets", action="store_true")
+    parser.add_argument("--cached-input", help="use the saved copies of the raw VC spreadsheets", action="store_true")
+    parser.add_argument("--save-output", help="don't delete output spreadsheets", action="store_true")
 
     args = parser.parse_args()
     return args

@@ -1,0 +1,61 @@
+<html>
+  <head>
+  </head>
+  <body>
+
+    <p>
+    This is an automated report to try and make it easier for people to keep track of their direct reports.
+    </p>
+
+    <p>
+    This report was sent to {{ First }} {{ Last }}.  Volunteer Connection has your supervisor as '{{ Supervisor }}', your work location as '{{ Work_Location }}', and your last day as {{ Last_Day }}.
+    </p>
+
+    <p>
+    {% if Location_type == 'Virtual' %}
+      You are assigned virtually and do not have Red Cross assigned lodging
+    {% else %}
+      You are marked as having an in-person assignment, and are lodged at '{{ Current_lodging }}'
+      {% if Current_lodging == 'Unknown' %}
+        </p>
+        <p>
+        PLEASE LET US KNOW WHERE YOU ARE STAYING (hotel + room, or Home of Record) so we can update our database.
+        </p>
+      {% endif %}
+    {% endif %}
+    </p>
+
+    <p>
+      Currently, Volunteer Connection thinks your direct reports are:
+    </p>
+
+    <pre>
+{{ Reports }}
+    </pre>
+
+    <p>
+    If it is all correct: there is no need to reply.
+    </p>
+
+    <p>
+    If you have any corrections to any of this information please email
+    <a href='mailto:{{ mail_owner }}'>{{ mail_owner }}</a>
+    </p>
+
+    <p>
+    If you hit a speedbump or just have a question about completing evaluations for your direct reports, let us help!
+    </p>
+
+    <p>
+    Thanks.
+    </p>
+
+    <p>
+    {{ dr_name }} Staffing
+    </p>
+
+    <p>
+    This email generated on {{ Date }}
+    </p>
+  </body>
+</html>

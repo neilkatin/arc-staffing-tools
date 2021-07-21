@@ -909,7 +909,7 @@ def read_common(session, config, args, params0, params1, filename):
 
     url = "https://volunteerconnection.redcross.org"
 
-    if args.cached_input:
+    if 'cached_input' in args and args.cached_input:
         log.debug(f"Using cached input data from { filename }")
         with open(filename, "rb") as fd:
             content = fd.read()
@@ -955,7 +955,7 @@ def read_common(session, config, args, params0, params1, filename):
     log.debug(f"retrieved document.  size is { len(response.text) }, type is '{ response.headers.get('content-type') }'")
     #log.debug(f"document: { response.content }")
 
-    if args.save_input:
+    if 'save_input' in args and args.save_input:
         log.debug(f"Saving input data to { filename }")
         with open(filename, "wb") as fd:
             fd.write(response.content)
