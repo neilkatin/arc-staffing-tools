@@ -40,6 +40,7 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
     log.debug("running...")
 
+    global config
     config = init_config()
 
     # initialize office 365 graph api
@@ -58,7 +59,11 @@ def main():
             ]
 
     token_backend = O365.FileSystemTokenBackend(token_path='.', token_filename="my_token.txt")
-    account = O365.Account(credentials, scopes=scopes, token_backend=token_backend)
+    if config.MAIL_SENDER != '':
+        account = O365.Account(credentials, scopes=scopes, token_backend=token_backend, main_resource=config.MAIL_SENDER)
+    else:
+        account = O365.Account(credentials, scopes=scopes, token_backend=token_backend)
+     
 
     if not account.is_authenticated:
         account.authenticate()
@@ -100,8 +105,14 @@ def main():
     date = datetime.datetime.now().strftime("%Y-%m-%d %H%M")
 
     if args.send or args.test_send:
-        send_mail(account, date, output_wb[config.OUTPUT_SHEET_REPORTING], templates.get_template("mail_supervisor.html"), f"{ config.DR_NAME } Supervisor", config, args)
-        send_mail(account, date, output_wb[config.OUTPUT_SHEET_NONSVS],    templates.get_template("mail_nonsvs.html"), config.DR_NAME, config, args)
+        if args.sups:
+            send_mail(account, date, output_wb[config.OUTPUT_SHEET_REPORTING], templates.get_template("mail_supervisor.html"), f"{ config.DR_NAME } Supervisor", config, args)
+
+        if args.responders:
+            send_mail(account, date, output_wb[config.OUTPUT_SHEET_NONSVS],    templates.get_template("mail_nonsvs.html"), config.DR_NAME, config, args)
+
+        if args.short:
+            send_mail(account, date, output_wb[config.OUTPUT_SHEET_3DAYS],    templates.get_template("mail_3days.html"), config.DR_NAME, config, args)
 
 
 def send_mail(account, date, ws, template, label, config, args):
@@ -142,7 +153,7 @@ def send_mail(account, date, ws, template, label, config, args):
 
         m = account.new_message()
         if args.test_send:
-            m.bcc.add("generic@askneil.com")
+            m.bcc.add(config.MAIL_BCC)
         if args.send:
             m.to.add(context['Email'])
         m.subject = f"{label} VC status - { date } - { name }"
@@ -408,7 +419,7 @@ def generate_3days(wb, sups, name_dict, sheet_name):
 
 
     short = {}
-    three_days = datetime.datetime.now() + datetime.timedelta(days=3)    # 3 days in the future
+    three_days = datetime.datetime.now() + datetime.timedelta(days=config.DAYS_BEFORE_WARNING)    # 3 days in the future
     for name, val in name_dict.items():
 
         # skip people not checked in
@@ -427,14 +438,15 @@ def generate_3days(wb, sups, name_dict, sheet_name):
 
     output_cols = [
             { 'name': 'Name', 'width': 20, 'field': lambda x: name_dict[x]['Name'], },
-            { 'name': 'First', 'width': 20, 'field': lambda x: get_first(name_dict[x]['Name']), },
-            { 'name': 'Last', 'width': 20, 'field': lambda x: get_last(name_dict[x]['Name']), },
+            { 'name': 'First', 'width': 15, 'field': lambda x: get_first(name_dict[x]['Name']), },
+            { 'name': 'Last', 'width': 15, 'field': lambda x: get_last(name_dict[x]['Name']), },
             { 'name': 'Email', 'width': 30, 'field': lambda x: name_dict[x]['Email'] },
-            { 'name': 'Supervisor', 'width': 30, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
-            { 'name': 'Last Day', 'width': 30, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
-            { 'name': 'GAP', 'width': 30, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
+            { 'name': 'Supervisor', 'width': 20, 'field': lambda x: get_supervisor(name_dict[x]['Current/Last Supervisor']) },
+            { 'name': 'Last Day', 'width': 12, 'field': lambda x: excel_date_to_string(name_dict[x]['Expect release']) },
+            { 'name': 'Days Remaining', 'width': 5, 'field': lambda x: get_unknown(name_dict[x]['DaysRemain']) },
+            { 'name': 'GAP', 'width': 15, 'field': lambda x: format_gap(name_dict[x]['GAP(s)']) },
             { 'name': 'Work Location', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Reporting/Work Location']) },
-            { 'name': 'Location type', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
+            #{ 'name': 'Location type', 'width': 15, 'field': lambda x: get_unknown(name_dict[x]['Location type']) },
             { 'name': 'Current lodging', 'width': 30, 'field': lambda x: get_unknown(name_dict[x]['Current lodging']) },
             ]
 
@@ -466,6 +478,10 @@ def generate_sheet(wb, people, output_cols, sheet_name):
         for i, col_def in enumerate(output_cols):
             value = col_def['field'](name)
             ws.cell(column=i+1, row=output_row, value=value)
+
+    if output_row == 1:
+        # special case to avoid empty tables
+        output_row = 2
 
     ref = f"A1:{openpyxl.utils.get_column_letter(len(output_cols))}{ output_row }"
     log.debug(f"sheet { sheet_name } table range ref is '{ ref }'")
@@ -560,8 +576,18 @@ def parse_args():
     parser.add_argument("--save-input", help="save a copy of the raw VC spreadsheets", action="store_true")
     parser.add_argument("--cached-input", help="use the saved copies of the raw VC spreadsheets", action="store_true")
     parser.add_argument("--save-output", help="don't delete output spreadsheets", action="store_true")
+    parser.add_argument("--sups", help="generate the supervisors emails", action="store_true")
+    parser.add_argument("--responders", help="generate the responders (non-sups) emails", action="store_true")
+    parser.add_argument("--short", help="generate the short timer warning", action="store_true")
 
     args = parser.parse_args()
+
+    # if none are set: send all 3
+    if not args.sups and not args.responders and not args.short:
+        args.sups = True
+        args.responders = True
+        args.short = True
+
     return args
 
 

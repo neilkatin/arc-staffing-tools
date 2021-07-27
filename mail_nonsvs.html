@@ -8,14 +8,22 @@
     </p>
 
     <p>
-    This report was sent to {{ First }} {{ Last }}.  Volunteer Connection has your supervisor as '{{ Supervisor }}', your work location as '{{ Work_Location }}', and your last day as {{ Last_Day }}.
+    This report was sent to {{ First }} {{ Last }}.  Volunteer Connection has this data about you:
     </p>
+    <ul>
+        <li>GAP: '{{ GAP }}'</li>
+        <li>Supervisor: '{{ Supervisor }}'</li>
+        <li>Work Location: '{{ Work_Location }}'</li>
+        <li>Last Day: '{{ Last_Day }}'</li>
+        {% if Location_type != 'Virtual' %}
+        <li>Lodging: '{{ Current_lodging }}'</li>
+        {% endif %}
+    </ul>
 
     <p>
     {% if Location_type == 'Virtual' %}
     You are assigned virtually and do not have Red Cross assigned lodging
     {% else %}
-      You are marked as having an in-person assignment, and are lodged at '{{ Current_lodging }}'
       {% if Current_lodging == 'Unknown' %}
         </p>
         <p>

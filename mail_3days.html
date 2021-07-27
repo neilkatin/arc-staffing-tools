@@ -1,0 +1,50 @@
+<html>
+  <head>
+  </head>
+  <body>
+
+    <p>
+    This is an automated report to try and make it easier to have the DR database in Volunteer Connection (VC) match reality.
+    </p>
+
+    <p>
+    This report was sent to {{ First }} {{ Last }}.  
+    </p>
+
+    <p>
+    The database shows you only have {{ Days_Remaining }} day{{ Days_Remaining|pluralize }} left on the job; your last day working is {{ Last_Day }}.
+    </p>
+
+    <p>
+    If you wish to extend talk to your supervisor, then have your supervisor email
+    <a href='mailto:{{ mail_owner }}'>{{ mail_owner }}</a> with your updated last day.
+    If you are already off the DRO: same thing; please email us.
+    </p>
+
+    <p>
+    If your end date is correct: please check the IAP for the out-processing checklist to ensure a smooth exit from the DR.  Thanks!
+    </p>
+
+
+    <p>
+    If you have any questions or corrections please email
+    <a href='mailto:{{ mail_owner }}'>{{ mail_owner }}</a>
+    </p>
+
+    <p>
+    If you hit a speedbump or just have a question: let us help!
+    </p>
+
+    <p>
+    Thanks.
+    </p>
+
+    <p>
+    {{ dr_name }}  Staffing
+    </p>
+
+    <p>
+    This email generated on {{ Date }}
+    </p>
+  </body>
+</html>

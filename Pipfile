@@ -13,6 +13,7 @@ o365 = "*"
 requests-html = "*"
 selenium = "*"
 jinja2 = "*"
+jinja2-pluralize = "*"
 
 [requires]
 python_version = "3.8"

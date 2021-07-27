@@ -28,10 +28,13 @@ WORKFORCE_FOLDER_PATH = '/Workforce/.Archive/DO NOT DELETE - AUTO EMAIL DATA/Mai
 #MAIL_ADDRESS = 'dr767-21-staffing-reports@americanredcross.onmicrosoft.com'
 #MAIL_ARCHIVE = 'https://outlook.office.com/mail/group/americanredcross.onmicrosoft.com/dr767-21-staffing-reports/email'
 
-MAIL_OWNER = "neil.katin@redcross.org"
+#MAIL_OWNER = "neil.katin@redcross.org"
+MAIL_OWNER = "dr155-22Staffing@redcross.org"
+MAIL_SENDER = MAIL_OWNER
 MAIL_ADDRESS = 'dr155-22-staffing-reports@americanredcross.onmicrosoft.com'
-MAIL_BCC = 'neil@askneil.com'
+MAIL_BCC = 'dr155-22-test-messages@askneil.com'
 MAIL_ARCHIVE = 'https://outlook.office.com/mail/group/americanredcross.onmicrosoft.com/dr155-22-staffing-reports/email'
+DAYS_BEFORE_WARNING = 4
 
 COOKIE_FILE = 'cookies.txt'
 WEB_TIMEOUT = 60
