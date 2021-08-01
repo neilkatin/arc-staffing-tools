@@ -82,19 +82,6 @@ def main():
             'files': [],
             }
 
-    # for debugging new reports
-    #with open("air_travel_roster.xls", 'wb') as file:
-    #    data = read_air_travel_roster(session, config, False)
-    #    file.write(data)
-    #with open("air_travel_roster.xls", 'rb') as file:
-    #    data = file.read()
-    #process_air_travel_roster(results, data)
-    #return
-
-    #with open("open_requests.xls", 'wb') as fd:
-    #    data = read_open_requests(session, config, False)
-    #    fd.write(data)
-
     process_arrival_roster(results, read_arrival_roster(session, config, args))
     process_open_requests(results, read_open_requests(session, config, args))
     process_staff_roster(results, read_staff_roster(session, config, args))
@@ -192,7 +179,9 @@ If you wish to be removed from the group or have more people added: email
 
     message.subject = f"Staff Reports { TIMESTAMP }"
     message.attachments.add(results['files'])
-    message.send(save_to_sent_folder=True)
+
+    if args.post or not args.save_output:
+        message.send(save_to_sent_folder=True)
 
 
     # clean up after ourselves
@@ -222,6 +211,12 @@ def process_air_travel_roster(results, contents):
 
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['a1'].font = out_ws['d1'].font = title_font
+
+    def post_fixup(ws):
+
+        ws.freeze_panes = 'C4'
+
+
 
     params = {
             'sheet_name': 'Air Travel Roster',
@@ -253,6 +248,7 @@ def process_air_travel_roster(results, contents):
             'column_fills': {
                     },
             'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, params),
+            'post_fixup': post_fixup,
             }
 
     results['files'].append(params['out_file_name'])
@@ -290,6 +286,12 @@ def process_arrival_roster(results, contents):
             if in_ws.cell_value(in_starting_row-1, 0) == 'Name':
                 # vc has fewer header rows in an empty spreadsheet...  Sigh.
                 params['in_starting_row'] = in_starting_row -1
+
+
+    def post_fixup(ws):
+
+        ws.freeze_panes = 'B5'
+
 
     def filter_arrive_date(cell, today, fill_past, fill_today, fill_tomorrow):
         """ decide if there is a special fill to apply to the cell """
@@ -341,6 +343,7 @@ def process_arrival_roster(results, contents):
                     'Arrive date': lambda cell: filter_arrive_date(cell, TODAY, fill_past, fill_today, fill_tomorrow),
                     },
             'pre_fixup': lambda in_ws, out_ws: pre_fixup(in_ws, out_ws, params),
+            'post_fixup': post_fixup,
             }
 
     results['files'].append(params['out_file_name'])
@@ -359,6 +362,12 @@ def process_open_requests(results, contents):
 
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['A1'].font = out_ws['E1'].font = title_font
+
+
+    def post_fixup(ws):
+
+        ws.freeze_panes = 'C3'
+
 
     results['requests_open'] = 0
     results['requests_requests'] = 0
@@ -401,13 +410,14 @@ def process_open_requests(results, contents):
                     'Open': lambda cell: filter_open(cell, results),
                     },
             'pre_fixup': pre_fixup,
-            #'post_fixup': post_fixup,
+            'post_fixup': post_fixup,
             }
 
     results['files'].append(params['out_file_name'])
     process_common(contents, params)
 
 
+gap_group_re = re.compile('^([A-Z]+)')
 
 def process_staff_roster(results, contents):
     """ generate the staff roster spreadsheets """
@@ -423,9 +433,19 @@ def process_staff_roster(results, contents):
         title_font = openpyxl.styles.Font(name='Arial', size=14, bold=True)
         out_ws['A1'].font = out_ws['A2'].font = out_ws['A3'].font = title_font
 
+    gap_groups = {}
     def row_filter(row, out_column_map):
+
         released = row[out_column_map['Released']]
         #log.debug(f"checking released: { released }")
+
+        gap = row[out_column_map['GAP(s)']]
+        match = gap_group_re.match(gap)
+        if match is not None:
+            group = match.group(1)
+            if group not in gap_groups:
+                gap_groups[group] = 1
+                log.debug(f"setting group '{ group }'")
 
         return released == ''
 
@@ -472,6 +492,8 @@ def process_staff_roster(results, contents):
         cell.value = re.sub(regex, f"({results['staff_total']} ", value)
         #log.debug(f"value '{value}' after '{cell.value}'")
 
+        ws.freeze_panes = "B5"
+
     def post_fixup_outprocessed(ws):
 
         cell = ws['A2']
@@ -480,6 +502,8 @@ def process_staff_roster(results, contents):
         regex = r'\(\d+ '
         cell.value = re.sub(regex, f"({results['staff_outprocessed']} ", value)
         #log.debug(f"value '{value}' after '{cell.value}'")
+
+        ws.freeze_panes = "B5"
 
     params = {
             'sheet_name': 'Staff Roster',
@@ -536,8 +560,9 @@ def process_staff_roster(results, contents):
             }
 
     results['files'].append(params['out_file_name'])
-    process_common(contents, params)
+    process_common(contents, params, groups=gap_groups)
 
+    gap_groups = {}
     params['sheet_name'] = 'Outprocessed'
     params['out_file_name'] = f'{ config.DR_NAME } Outprocessed Roster { TIMESTAMP }.xlsx'
     params['table_name'] = 'Outprocessed'
@@ -546,7 +571,7 @@ def process_staff_roster(results, contents):
     params['post_fixup'] = post_fixup_outprocessed
 
     results['files'].append(params['out_file_name'])
-    process_common(contents, params)
+    process_common(contents, params, groups=gap_groups)
 
 
 
@@ -633,7 +658,9 @@ def process_shift_tool(results, contents):
     process_common(contents, params)
 
 
-def process_common(contents, params):
+
+
+def process_common(contents, params, groups=None):
     """ common code to process all sheets """
     
 
@@ -642,6 +669,55 @@ def process_common(contents, params):
 
     out_wb = openpyxl.Workbook()
     out_ws = out_wb.create_sheet(title=params['sheet_name'])
+
+
+    process_common_sheet(in_ws, out_ws, contents, params)
+
+
+    if groups is not None and len(groups) > 0:
+        # add extra sheets
+        group_names = sorted(list(groups.keys()))
+        log.debug(f"group_names { group_names } groups { groups }")
+
+        for name in group_names:
+            orig_filter = None
+            if 'row_filter' in params:
+                orig_filter = params['row_filter']
+
+
+                def group_row_filter(row, out_column_map):
+                    """ pre-filter to ignore GAPs in the wrong group """
+                    gap = row[out_column_map['GAP(s)']]
+                    match = gap_group_re.match(gap)
+
+                    if match is not None:
+                        group = match.group(1)
+                        if group != name:
+                            return False
+
+                    return orig_filter(row, out_column_map)
+
+                params['row_filter'] = group_row_filter
+
+            out_ws = out_wb.create_sheet(title=name)
+            params['table_name'] = name
+            process_common_sheet(in_ws, out_ws, contents, params)
+
+            if orig_filter is not None:
+                params['row_filter'] = orig_filter
+
+
+    default_sheet_name = 'Sheet'
+    if default_sheet_name in out_wb:
+        del out_wb[default_sheet_name]
+
+    log.debug(f"saving file { params['out_file_name'] }")
+    out_wb.save(params['out_file_name'])
+
+
+
+
+def process_common_sheet(in_ws, out_ws, contents, params):
 
     # do some ws dependent preliminary initialization
     if 'pre_fixup' in params:
@@ -726,12 +802,6 @@ def process_common(contents, params):
     out_ws.add_table(table)
 
 
-    default_sheet_name = 'Sheet'
-    if default_sheet_name in out_wb:
-        del out_wb[default_sheet_name]
-
-    log.debug(f"saving file { params['out_file_name'] }")
-    out_wb.save(params['out_file_name'])
 
 
 def process_title_row(row, delete_columns):
